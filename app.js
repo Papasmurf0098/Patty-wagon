@@ -113,6 +113,7 @@ function resetGame() {
   state.lives = 3;
   state.worldTime = 0;
   state.ingredients = [];
+  state.activeKeys.clear();
   state.spawnTimer = 0;
   state.difficultyTimer = 0;
   state.spawnInterval = 0.9;
@@ -131,7 +132,12 @@ function startGame() {
 }
 
 function endGame(message) {
+  if (!state.running) {
+    return;
+  }
+
   state.running = false;
+  state.activeKeys.clear();
   showOverlay('Shift complete', `${message} Final score: ${state.score}.`, 'Run it back');
 }
 
@@ -483,6 +489,10 @@ window.addEventListener('keyup', (event) => {
   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
     state.activeKeys.delete(event.key);
   }
+});
+
+window.addEventListener('blur', () => {
+  state.activeKeys.clear();
 });
 
 startButton.addEventListener('click', startGame);

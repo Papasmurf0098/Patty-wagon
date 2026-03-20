@@ -11,8 +11,9 @@ check:
 	@test -f index.html
 	@test -f style.css
 	@test -f app.js
+	@! rg -n '^(<<<<<<<|=======|>>>>>>>)' --glob '!*.svg' .
 	@node --check app.js
-	@echo "Game files are present and JavaScript syntax is valid."
+	@echo "Game files are present, conflict markers are absent, and JavaScript syntax is valid."
 
 serve:
 	@python3 -m http.server 8000
