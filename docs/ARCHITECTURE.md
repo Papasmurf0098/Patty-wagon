@@ -4,27 +4,38 @@
 
 Patty-wagon is a dependency-free browser game built with:
 
-- semantic HTML for structure;
-- CSS for responsive layout and visual styling;
-- vanilla JavaScript plus the Canvas API for the game loop and rendering.
+- semantic HTML for structure and HUD layout;
+- CSS for responsive presentation and visual theming;
+- vanilla JavaScript plus the Canvas API for gameplay, animation, and rendering.
 
 ## Application structure
 
-- `index.html` defines the two-panel layout, scoreboard, order panel, and end-game overlay.
-- `style.css` handles the arcade presentation and adapts the layout for smaller screens.
-- `app.js` owns game state, order generation, input handling, collision logic, scoring, timing, and rendering.
+- `index.html` defines the two-panel layout, scoreboard, order panel, controls, and overlay states.
+- `style.css` handles the saturated arcade look, responsive layout, and panel styling around the canvas.
+- `app.js` owns game state, spawn logic, input handling, score/timer updates, collision checks, truck movement, and scene rendering.
+- `Makefile` provides local developer commands for validation and static serving.
 
-## Gameplay loop
+## Runtime model
 
-1. The player starts a shift.
-2. Ingredients spawn and fall toward the truck.
-3. Catching the correct ingredient advances the active burger.
-4. Completing a burger awards score and extra time, then a new order is selected.
-5. The game ends when time or lives run out.
+The game loop is driven by `requestAnimationFrame` and is organized around a few responsibilities:
+
+1. update player movement using acceleration, drag, edge clamping, and visual tilt;
+2. spawn and animate ingredient pickups;
+3. resolve catches using circle-versus-rectangle collision checks against the truck catch zone;
+4. advance order progress, score, timer, and lives;
+5. render the skybox, skyline, road, truck, ingredient sprites, and HUD hints every frame.
+
+## Validation model
+
+The repository intentionally keeps validation lightweight:
+
+- `make check` confirms required game files are present;
+- `make check` scans the repository for unresolved merge-conflict markers;
+- `make check` runs `node --check app.js` for a fast JavaScript syntax pass.
 
 ## Future expansion ideas
 
-- add difficulty levels or endless mode;
-- track a local high score;
+- add touch controls for mobile play;
+- add local high-score persistence;
 - add sound effects and pause support;
-- support touch controls for mobile play.
+- split rendering and gameplay logic into modules if the game grows substantially.

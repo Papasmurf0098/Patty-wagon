@@ -3,7 +3,7 @@
 help:
 	@echo "Available targets:"
 	@echo "  make help   - Show available commands"
-	@echo "  make check  - Run basic repository checks"
+	@echo "  make check  - Verify files, scan for conflict markers, and validate JS syntax"
 	@echo "  make serve  - Start a local static file server on port 8000"
 	@echo "  make format - No formatter configured"
 
