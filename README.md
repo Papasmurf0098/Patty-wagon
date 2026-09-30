@@ -19,7 +19,7 @@ The town map shows the full connected network and lets you start exploring in an
 - Individually modeled pineapple, stone-head and rock homes, Krusty Krab, Chum Bucket, Goofy Goober, Thug Tug, and Neptune's castle.
 - 612 crowns, 123 breakable barrels, nine ramps, seven secret locations, three exploration milestones, nine boat vehicles, 40 fish residents, and 38 jellyfish.
 - Terrain-following driving and suspension orientation, boost upgrades, ramp flight, camera obstruction checks, nearest-road recovery, local collision queries, a minimap, and a full town map.
-- Seeded terrain and scenery, road and landing-zone exclusions, minimum-spacing placement across chunk borders, worker generation, streamed instanced scenery, landmark LOD, and an approximately 55-chunk cache limit.
+- Seeded terrain and scenery, road and landing-zone exclusions, minimum-spacing placement across chunk borders, worker generation, streamed instanced scenery, landmark LOD, terrain-conforming road paint, and an approximately 55-chunk cache limit.
 
 All models are newly generated geometry; official game asset files are not distributed. This is a stylized procedural implementation rather than a reproduction of the original game's assets or exact map.
 
@@ -51,6 +51,6 @@ See [the current design](docs/DESIGN.md) and [the approved correction plan](docs
 
 ## Validation and limits
 
-Sixteen automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
+Eighteen automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
 
 Browser visual review follows deployment. Desktop WebGL and real-phone performance are not yet measured. SVG mode is a compatibility view and has less scenery, no shadows or particle effects, and a lower render frequency. It is not a benchmark for WebGL quality. General seafloor collision follows terrain and ramps; caves are drive-through arches rather than a volumetric cave system, traffic is kinematic, and breakage uses particles rather than rigid-body fragments.

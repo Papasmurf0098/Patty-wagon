@@ -350,3 +350,37 @@ test("chassis tilts its nose upward on an uphill grade and right side upward acr
   assert.ok(s.pitch > 0, "nose must rise toward elevated ground");
   assert.ok(s.roll > 0, "right side must rise with the bank");
 });
+
+test("road paint follows the seafloor and remains continuous across chunk borders", async () => {
+  const { surfacePaint, surfaceColor } = await import(
+    "../src/world/SurfacePaint.js"
+  );
+  const a = surfacePaint(-512, 384),
+    b = surfacePaint(-384, 384),
+    n = 65;
+  for (let z = 0; z < n; z++)
+    assert.deepEqual(
+      a.pixels.slice((z * n + 64) * 4, (z * n + 64) * 4 + 4),
+      b.pixels.slice(z * n * 4, z * n * 4 + 4),
+    );
+  const point = roadPaths[0].nodes[35],
+    road = surfaceColor(point.x, point.z),
+    sand = surfaceColor(850, 500);
+  assert.ok(road[0] < sand[0] * 0.5, "road center must be distinct from sand");
+});
+
+test("native chunk rendering receives valid transferred paint and local texture coordinates", () => {
+  const w = newWorld(),
+    data = generateChunk(-3, 3),
+    key = "-3,3";
+  w.createChunk(data);
+  const terrain = w.chunks.get(key).terrain;
+  assert.ok(terrain.material.map.isDataTexture);
+  assert.equal(terrain.material.map.image.width, 65);
+  assert.equal(terrain.material.map.image.data.length, 65 * 65 * 4);
+  const uv = terrain.geometry.attributes.uv;
+  for (let i = 0; i < uv.count; i++)
+    assert.ok(
+      uv.getX(i) >= 0 && uv.getX(i) <= 1 && uv.getY(i) >= 0 && uv.getY(i) <= 1,
+    );
+});

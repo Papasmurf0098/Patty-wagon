@@ -46,6 +46,10 @@ try {
     audio = new Audio(),
     car = makeWagon();
   scene.add(car);
+  if (software)
+    car.traverse((node) => {
+      if (node.isMesh) node.renderOrder = 5;
+    });
   if (software) {
     const hidden = [world.particleMesh, world.bubbleMesh];
     for (const m of hidden) scene.remove(m);

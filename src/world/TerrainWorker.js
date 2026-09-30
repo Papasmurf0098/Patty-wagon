@@ -6,5 +6,6 @@ self.onmessage = ({ data }) => {
     result.colors.buffer,
     result.uv.buffer,
     result.indices.buffer,
+    result.paint.buffer,
   ]);
 };

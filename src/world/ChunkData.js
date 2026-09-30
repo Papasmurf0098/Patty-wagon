@@ -1,3 +1,4 @@
+import { surfacePaint } from "./SurfacePaint.js";
 import {
   CHUNK_SIZE,
   landmarks,
@@ -119,5 +120,17 @@ export function generateChunk(cx, cz, segments = 32) {
         color: Math.floor(hash(gx, gz, 42) * 3),
       });
     }
-  return { cx, cz, segments, positions, colors, uv, indices, props };
+  const paint = surfacePaint(ox, oz);
+  return {
+    cx,
+    cz,
+    segments,
+    positions,
+    colors,
+    uv,
+    indices,
+    props,
+    paint: paint.pixels,
+    paintSize: paint.resolution,
+  };
 }

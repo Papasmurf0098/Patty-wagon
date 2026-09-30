@@ -19,6 +19,8 @@ import {
   clamp,
 } from "./Terrain.js";
 import { generateChunk } from "./ChunkData.js";
+import { surfaceColor } from "./SurfacePaint.js";
+import { roadGeometry } from "./RoadGeometry.js";
 import { SpatialHash } from "./SpatialHash.js";
 import {
   mat,
@@ -126,48 +128,34 @@ export class World {
       const x = pos.getX(i),
         z = pos.getZ(i);
       pos.setY(i, rawHeight(x, z) - 3);
-      colors.set(colorAt(x, z), i * 3);
+      colors.set(surfaceColor(x, z), i * 3);
       geo.attributes.uv.setXY(i, x / 28, z / 28);
     }
     geo.setAttribute("color", new T.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
     this.floor = mesh(this.scene, geo, this.terrainMat);
     this.floor.castShadow = false;
+    this.floor.renderOrder = -60;
   }
   makeRoads() {
     const markings = [];
     for (const path of roadPaths) {
-      const positions = [],
-        indices = [];
       path.nodes.forEach((p, i) => {
-        const prev = path.nodes[Math.max(0, i - 1)],
-          next = path.nodes[Math.min(path.nodes.length - 1, i + 1)],
-          dx = next.x - prev.x,
-          dz = next.z - prev.z,
-          length = Math.hypot(dx, dz) || 1;
-        for (const sign of [-1, 1]) {
-          const x = p.x + (((dz / length) * path.width) / 2) * sign,
-            z = p.z - (((dx / length) * path.width) / 2) * sign;
-          positions.push(x, terrainHeight(x, z) + 0.14, z);
-        }
-        if (i) {
-          const a = (i - 1) * 2;
-          indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
-        }
+        const previous = path.nodes[Math.max(0, i - 1)],
+          next = path.nodes[Math.min(path.nodes.length - 1, i + 1)];
         if (i % 3 === 0)
           markings.push({
             x: p.x,
-            y: terrainHeight(p.x, p.z) + 0.19,
+            y: terrainHeight(p.x, p.z) + 0.34,
             z: p.z,
-            a: Math.atan2(dx, dz),
+            a: Math.atan2(next.x - previous.x, next.z - previous.z),
           });
       });
-      const geo = new T.BufferGeometry();
-      geo.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
-      geo.setIndex(indices);
-      geo.computeVertexNormals();
-      const m = mesh(this.scene, geo, 0x50878b);
-      m.castShadow = false;
+      if (this.software) {
+        const m = mesh(this.scene, roadGeometry(path, 24), 0x50878b);
+        m.castShadow = false;
+        m.renderOrder = -30;
+      }
     }
     const batch = new T.InstancedMesh(
       new T.BoxGeometry(0.45, 0.025, 4),
@@ -181,6 +169,7 @@ export class World {
       setInstance(batch, i, dummy);
     });
     batch.computeBoundingSphere();
+    batch.renderOrder = -29;
     this.scene.add(batch);
   }
   makeLandmarks() {
@@ -552,6 +541,10 @@ export class World {
     if (prior) {
       this.scene.remove(prior.group);
       prior.terrain.geometry.dispose();
+      if (!this.software) {
+        prior.terrain.material.map.dispose();
+        prior.terrain.material.dispose();
+      }
     }
     const group = new T.Group();
     group.position.set(data.cx * CHUNK_SIZE, 0, data.cz * CHUNK_SIZE);
@@ -562,8 +555,29 @@ export class World {
     geo.setIndex(new T.BufferAttribute(data.indices, 1));
     geo.computeVertexNormals();
     geo.computeBoundingSphere();
-    const terrain = mesh(group, geo, this.terrainMat);
+    let terrainMaterial = this.terrainMat;
+    if (!this.software) {
+      const texture = new T.DataTexture(
+        data.paint,
+        data.paintSize,
+        data.paintSize,
+        T.RGBAFormat,
+      );
+      texture.colorSpace = T.SRGBColorSpace;
+      texture.magFilter = T.LinearFilter;
+      texture.minFilter = T.LinearFilter;
+      texture.needsUpdate = true;
+      terrainMaterial = new T.MeshLambertMaterial({ map: texture });
+      for (let i = 0; i < geo.attributes.uv.count; i++)
+        geo.attributes.uv.setXY(
+          i,
+          geo.attributes.position.getX(i) / CHUNK_SIZE,
+          geo.attributes.position.getZ(i) / CHUNK_SIZE,
+        );
+    }
+    const terrain = mesh(group, geo, terrainMaterial);
     terrain.castShadow = false;
+    terrain.renderOrder = -50;
     const flora = [];
     for (const type of ["rock", "coral", "kelp"])
       for (let color = 0; color < 3; color++) {
@@ -723,6 +737,10 @@ export class World {
       if (c) {
         this.scene.remove(c.group);
         c.terrain.geometry.dispose();
+        if (!this.software) {
+          c.terrain.material.map.dispose();
+          c.terrain.material.dispose();
+        }
         this.chunks.delete(c.key);
       } else break;
     }

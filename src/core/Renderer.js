@@ -42,6 +42,7 @@ export function prepareSoftwareScene(root) {
     batch.parent.add(group);
     for (let i = 0; i < batch.count; i++) {
       const m = new T.Mesh(batch.geometry, batch.material);
+      m.renderOrder = batch.renderOrder;
       batch.getMatrixAt(i, transform);
       transform.decompose(m.position, m.quaternion, m.scale);
       group.add(m);
