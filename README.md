@@ -27,7 +27,9 @@ WASD / arrows drive; Space brakes and drifts; Shift boosts; R resets the vehicle
 
 ## GitHub Pages
 
-The workflow tests and builds on pushes to main and deploys `dist/`. Set repository Settings → Pages → Source to **GitHub Actions** if it is not already selected. Vite uses relative asset paths for repository hosting. Runtime dependencies are bundled; there is no CDN or backend dependency.
+The repository root contains a ready-to-serve `index.html` and bundled `assets/`. It works when Pages publishes main directly, and the workflow can also publish the equivalent `dist/` output. Both use relative asset URLs, require no CDN, and need no backend.
+
+The editable Vite entry is `game.html`; local development opens that page. `npm run build` compiles it, validates its asset references, and refreshes both `dist/` and the root publishing files. Commit the generated root `index.html`, `.nojekyll`, and `assets/` along with source changes. Do not edit the generated root HTML by hand.
 
 ## Architecture and scope
 
