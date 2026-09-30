@@ -42,3 +42,7 @@ The old implementation is replaced in the current tree. Earlier commits remain a
 ## Validation of the fresh start
 
 Six automated tests pass, covering driving direction, steering, boost/upgrades, ramp launch and landing, solid collision, corrupted and unavailable storage, scene construction, one-time pickups and destruction. Production bundling passes. Browser rendering and touch play have not yet been visually verified: the execution environment had no installed browser and its browser download failed. Test this starting build on desktop and phone before treating it as a polished release.
+
+## Graphics compatibility
+
+WebGL is the preferred renderer. If the browser cannot create a WebGL context, the game automatically uses a reduced-detail SVG renderer. It preserves driving, progression and controls, but omits shadows and particle rendering and updates visuals at a lower rate. This mode is intended for compatibility, not equivalent visual fidelity or performance.

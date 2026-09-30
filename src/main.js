@@ -1,5 +1,6 @@
 import * as T from "three";
 import "./style.css";
+import { createRenderer, prepareSoftwareScene } from "./core/Renderer.js";
 import { World, makeCar } from "./world/World.js";
 import { Input } from "./systems/Input.js";
 import { Audio } from "./systems/Audio.js";
@@ -8,17 +9,7 @@ import { initialVehicle, stepVehicle } from "./vehicle/VehiclePhysics.js";
 
 try {
   const canvas = document.querySelector("#game");
-  const renderer = new T.WebGLRenderer({
-    canvas,
-    antialias: true,
-    powerPreference: "high-performance",
-  });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = T.PCFSoftShadowMap;
-  renderer.outputColorSpace = T.SRGBColorSpace;
-  renderer.toneMapping = T.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.2;
+  const { renderer, software } = createRenderer(canvas);
   const scene = new T.Scene();
   scene.background = new T.Color(0x8acbd2);
   scene.fog = new T.Fog(0x8acbd2, 95, 210);
@@ -47,6 +38,8 @@ try {
     audio = new Audio(),
     car = makeCar(0xedac52, true);
   scene.add(car);
+  if (software) prepareSoftwareScene(scene, world.particleMesh);
+  let lastRender = 0;
   let state = initialVehicle(),
     paused = false,
     time = 0,
@@ -230,7 +223,10 @@ try {
           ? "Rustwater Works"
           : "Coral Commons";
     if (time > toastUntil) toast.classList.remove("visible");
-    renderer.render(scene, camera);
+    if (!software || now - lastRender >= 80) {
+      renderer.render(scene, camera);
+      lastRender = now;
+    }
   }
   notify("WASD / arrows to drive · Shift to boost · Space to drift");
   requestAnimationFrame(frame);
@@ -249,7 +245,8 @@ try {
         ramps: world.ramps.length,
         traffic: world.traffic.length,
         npcs: world.people.length,
-        drawCalls: renderer.info.render.calls,
+        renderer: software ? "software" : "webgl",
+        drawCalls: renderer.info.render.calls ?? renderer.info.render.faces,
         bestJump,
       };
     },
@@ -257,6 +254,6 @@ try {
 } catch (error) {
   const node = document.querySelector("#error");
   node.hidden = false;
-  node.textContent = `The 3D world could not start. Please enable WebGL or try an updated browser. ${error.message}`;
+  node.textContent = `The 3D world could not start. Please refresh the page or try an updated browser. ${error.message}`;
   console.error(error);
 }
