@@ -384,3 +384,46 @@ test("native chunk rendering receives valid transferred paint and local texture 
       uv.getX(i) >= 0 && uv.getX(i) <= 1 && uv.getY(i) >= 0 && uv.getY(i) <= 1,
     );
 });
+
+
+test("replacing streamed chunks releases instance buffers without destroying shared art", () => {
+  const w = newWorld();
+  const c = w.coins[0];
+  const cx = Math.floor(c.x / CHUNK_SIZE), cz = Math.floor(c.z / CHUNK_SIZE);
+  w.createChunk(generateChunk(cx, cz));
+  const chunk = w.chunks.get(`${cx},${cz}`);
+  let batches = 0, released = 0, sharedDisposed = 0, terrainDisposed = 0;
+  chunk.group.traverse(node => {
+    if (node.isInstancedMesh) {
+      batches++;
+      node.addEventListener('dispose', () => released++);
+      node.geometry.addEventListener('dispose', () => sharedDisposed++);
+    }
+  });
+  chunk.terrain.geometry.addEventListener('dispose', () => terrainDisposed++);
+  w.createChunk(generateChunk(cx, cz, 8));
+  assert.ok(batches > 0);
+  assert.equal(released, batches);
+  assert.equal(sharedDisposed, 0);
+  assert.equal(terrainDisposed, 1);
+  assert.equal(chunk.group.parent, null);
+  w.dispose();
+  assert.equal(w.chunks.size, 0);
+});
+
+test("rapid travel discards stale and duplicate generation work", () => {
+  const w = newWorld();
+  const spawn = spawnFor('conch');
+  w.ensureAround(spawn.x, spawn.z, 0, true);
+  const chunk = [...w.chunks.values()][0];
+  const [cx, cz] = chunk.key.split(',').map(Number);
+  w.queue = [
+    {key:'100,100', cx:100, cz:100, segments:32},
+    {key:chunk.key, cx, cz, segments:chunk.segments},
+  ];
+  w.stream();
+  assert.equal(w.queue.length, 0);
+  assert.equal(w.chunks.has('100,100'), false);
+  assert.equal(w.chunks.get(chunk.key), chunk);
+  w.dispose();
+});

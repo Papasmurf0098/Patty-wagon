@@ -538,14 +538,7 @@ export class World {
   createChunk(data) {
     const key = `${data.cx},${data.cz}`,
       prior = this.chunks.get(key);
-    if (prior) {
-      this.scene.remove(prior.group);
-      prior.terrain.geometry.dispose();
-      if (!this.software) {
-        prior.terrain.material.map.dispose();
-        prior.terrain.material.dispose();
-      }
-    }
+    if (prior) this.disposeChunk(prior);
     const group = new T.Group();
     group.position.set(data.cx * CHUNK_SIZE, 0, data.cz * CHUNK_SIZE);
     const geo = new T.BufferGeometry();
@@ -705,11 +698,13 @@ export class World {
     for (const chunk of this.chunks.values())
       chunk.group.visible = this.wanted.has(chunk.key);
     this.queue = requests;
-    if (immediate)
-      for (let i = 0; i < Math.min(3, this.queue.length); i++) {
+    if (immediate) {
+      const count = Math.min(3, this.queue.length);
+      for (let i = 0; i < count; i++) {
         const item = this.queue.shift();
         this.createChunk(generateChunk(item.cx, item.cz, item.segments));
       }
+    }
   }
   stream() {
     // Worker generation never touches Three.js or the DOM. Only one mesh is
@@ -722,6 +717,10 @@ export class World {
       else if (desired && !this.pending.has(key))
         this.queue.push({ key, cx: data.cx, cz: data.cz, segments: desired });
     }
+    this.queue = this.queue.filter((item) =>
+      this.wanted.get(item.key) === item.segments &&
+      this.chunks.get(item.key)?.segments !== item.segments &&
+      !this.pending.has(item.key));
     if (this.queue.length && this.pending.size < 3) {
       const item = this.queue.shift();
       if (this.worker) {
@@ -735,12 +734,7 @@ export class World {
         .sort((a, b) => a.used - b.used);
       const c = old[0];
       if (c) {
-        this.scene.remove(c.group);
-        c.terrain.geometry.dispose();
-        if (!this.software) {
-          c.terrain.material.map.dispose();
-          c.terrain.material.dispose();
-        }
+        this.disposeChunk(c);
         this.chunks.delete(c.key);
       } else break;
     }
@@ -923,7 +917,26 @@ export class World {
     const road = nearestRoad(x, z, true);
     return { x: road.x, z: road.z, heading: road.heading };
   }
+  disposeChunk(chunk) {
+    this.scene.remove(chunk.group);
+    // Instance buffers belong to each batch; geometry and palette materials
+    // are shared across chunks and must remain alive for neighboring scenery.
+    chunk.group.traverse((node) => {
+      if (node.isInstancedMesh) node.dispose();
+    });
+    chunk.terrain.geometry.dispose();
+    if (!this.software) {
+      chunk.terrain.material.map.dispose();
+      chunk.terrain.material.dispose();
+    }
+  }
   dispose() {
     this.worker?.terminate();
+    this.worker = null;
+    this.pending.clear();
+    this.ready.length = 0;
+    this.queue.length = 0;
+    for (const chunk of this.chunks.values()) this.disposeChunk(chunk);
+    this.chunks.clear();
   }
 }

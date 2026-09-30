@@ -51,6 +51,11 @@ See [the current design](docs/DESIGN.md) and [the approved correction plan](docs
 
 ## Validation and limits
 
-Eighteen automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
+Twenty automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
 
 The deployed game was visually reviewed in SVG compatibility mode across all seven areas. The town map's area controls and the seven-area exploration milestone were also checked. Desktop WebGL rendering and real-phone performance are not yet measured. SVG mode is a compatibility view and has less scenery, no shadows or particle effects, and a lower render frequency. It is not a benchmark for WebGL quality. General seafloor collision follows terrain and ramps; caves are drive-through arches rather than a volumetric cave system, traffic is kinematic, and breakage uses particles rather than rigid-body fragments.
+
+
+## Stability follow-up
+
+Streamed chunks now release their instance buffers when replaced or evicted, barrel hoops share geometry, and stale or duplicate terrain requests are discarded after travel. Startup no longer generates the same nearby terrain twice. Graphics-context loss saves progress and pauses until restoration. Two regression checks verify resource disposal and stale queue cleanup; all 20 tests and production bundling pass. This pass does not establish real-device frame rates.

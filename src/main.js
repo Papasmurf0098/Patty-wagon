@@ -63,7 +63,6 @@ try {
     save.position ?? spawnFor(),
     world.heightAt.bind(world),
   );
-  world.ensureAround(state.x, state.z, state.heading, true);
   let time = 0,
     last = performance.now(),
     lastRender = 0,
@@ -275,6 +274,21 @@ try {
     }
   });
   addEventListener("pagehide", persist);
+  if (!software) {
+    canvas.addEventListener("webglcontextlost", (event) => {
+      event.preventDefault();
+      persist();
+      pause(true);
+      const node = $("#error");
+      node.hidden = false;
+      node.textContent = "Graphics paused. Waiting for the browser to restore the game…";
+    });
+    canvas.addEventListener("webglcontextrestored", () => {
+      $("#error").hidden = true;
+      // Keep the menu open so driving only resumes when the player is ready.
+      notify("Graphics restored · choose Resume to continue");
+    });
+  }
   function resize() {
     renderer.setSize(innerWidth, innerHeight);
     camera.aspect = innerWidth / innerHeight;
@@ -481,3 +495,4 @@ try {
   node.textContent = `The underwater town could not start. Refresh the page to try again. ${error.message}`;
   console.error(error);
 }
+

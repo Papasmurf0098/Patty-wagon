@@ -547,11 +547,12 @@ export function makeJelly(color = 0xec9fc7) {
   }
   return g;
 }
+const barrelHoop = new T.TorusGeometry(0.96, 0.07, 5, 20);
 export function makeBarrel() {
   const g = new T.Group();
   cylinder(g, 0, 1, 0, 0.95, 2, 0xa57d58);
   for (const y of [0.3, 1.65])
-    ring(g, 0, y, 0, 0.96, 0.07, 0x536f74).rotation.x = Math.PI / 2;
+    mesh(g, barrelHoop, 0x536f74, 0, y, 0).rotation.x = Math.PI / 2;
   return g;
 }
 export function crownGeometry() {
@@ -634,3 +635,4 @@ export function makeArch(color = 0xc29ccb, width = 15, height = 13) {
     ball(g, x, 2, 0, 3.7, 3.5, 3.7, color);
   return g;
 }
+
