@@ -59,3 +59,7 @@ The deployed game was visually reviewed in SVG compatibility mode across all sev
 ## Stability follow-up
 
 Streamed chunks now release their instance buffers when replaced or evicted, barrel hoops share geometry, and stale or duplicate terrain requests are discarded after travel. Startup no longer generates the same nearby terrain twice. Graphics-context loss saves progress and pauses until restoration. Two regression checks verify resource disposal and stale queue cleanup; all 20 tests and production bundling pass. This pass does not establish real-device frame rates.
+
+## Open-world detail pass
+
+Decorative coral and kelp are reduced by 65.9% across the sampled 14×14 chunk grid (5,241 to 1,785 instances), retaining rock formations and authored landmarks. Base driving speed increases from 27 to 38 units/s, boost from 43 to 58, with stronger acceleration and adjusted steering. Fine repeating seafloor grain and current ripples use world coordinates so detail stays aligned across chunks. Roads gain sandy shoulders and wear, and landmarks gain compacted access paths and aprons. Inhabited districts gain sparse roadside benches and marine lamps. Jump landing detection also handles near-ground snaps correctly at higher speeds.

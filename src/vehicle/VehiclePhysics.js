@@ -22,13 +22,13 @@ export function stepVehicle(s, input, dt, world) {
   const boost = input.boost && input.throttle > 0 && s.energy > 1;
   const level = world.collected >= 80 ? 2 : world.collected >= 30 ? 1 : 0;
   s.energy = clamp(s.energy + (boost ? -26 : 16) * dt, 0, 100);
-  s.speed += input.throttle * (boost ? 32 : 21) * dt;
+  s.speed += input.throttle * (boost ? 43 : 29) * dt;
   s.speed *= Math.exp(-(input.brake ? 2.6 : input.throttle ? 0.25 : 0.8) * dt);
-  s.speed = clamp(s.speed, -12, (boost ? 43 : 27) + level * 3);
+  s.speed = clamp(s.speed, -16, (boost ? 58 : 38) + level * 4);
   s.heading -=
     input.steer *
     (input.brake ? 2.15 : 1.42) *
-    clamp(s.speed / 18, -1, 1.2) *
+    clamp(s.speed / 25, -1, 1.15) *
     dt *
     (wasGrounded ? 1 : 0.38);
   const grip = 1 - Math.exp(-(input.brake ? 2.4 : 8 + level) * dt);
@@ -57,6 +57,7 @@ export function stepVehicle(s, input, dt, world) {
     launched = true;
   }
   if (wasGrounded && !launched) {
+    landed = !s.grounded;
     s.y = nextGround;
     s.vy = 0;
   } else {
@@ -91,7 +92,7 @@ export function stepVehicle(s, input, dt, world) {
     )
   )
     Object.assign(s, initialVehicle());
-  s.grounded = s.y <= surface(world, s.x, s.z) + 0.18;
+  s.grounded = s.y <= surface(world, s.x, s.z) + 0.001 && s.vy <= 0;
   // Wheel samples align the burger body with grades without changing Y-up driving.
   const fwdX = -Math.sin(s.heading),
     fwdZ = -Math.cos(s.heading),
@@ -128,3 +129,4 @@ export function initialVehicle(spawn = spawnFor(), height = terrainHeight) {
     grounded: true,
   };
 }
+

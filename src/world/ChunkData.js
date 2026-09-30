@@ -109,6 +109,8 @@ export function generateChunk(cx, cz, segments = 32) {
               : v < 0.56
                 ? "kelp"
                 : "coral";
+      // Preserve rock formations; retain only 35% of decorative vegetation.
+      if (type !== "rock" && hash(gx, gz, 903) >= 0.35) continue;
       props.push({
         id: `flora:${gx}:${gz}`,
         x: p.x,
@@ -134,3 +136,4 @@ export function generateChunk(cx, cz, segments = 32) {
     paintSize: paint.resolution,
   };
 }
+

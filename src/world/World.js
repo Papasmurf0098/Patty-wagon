@@ -39,7 +39,7 @@ import {
   floraGeometries,
   crownGeometry,
 } from "../art/Models.js";
-import { sandTexture } from "../art/Textures.js";
+import { sandTexture, terrainMaterial as makeTerrainMaterial } from "../art/Textures.js";
 import { prepareSoftwareScene, setInstance } from "../core/Renderer.js";
 const dummy = new T.Object3D();
 export class World {
@@ -96,6 +96,7 @@ export class World {
     this.makeGround();
     this.makeRoads();
     this.makeLandmarks();
+    this.makeStreetDetails();
     this.makeSetPieces();
     this.makeExploration();
     this.makeResidents();
@@ -248,6 +249,37 @@ export class World {
         this.decor.push(home);
         this.addSolid(x, z, 10, 10, 16);
       }
+  }
+  makeStreetDetails() {
+    // Small roadside pockets give inhabited districts a readable human scale.
+    // Furniture sits on the shoulder, leaving the entire driving corridor open.
+    for (const d of districts.filter(d => ["conch", "commons", "lagoon", "neptune"].includes(d.id))) {
+      const path = roadPaths.find(p => p.id === (d.id === "conch" ? "conch-commons" :
+        d.id === "lagoon" ? "lagoon-commons" : d.id === "neptune" ? "palace-commons" : "wreck-commons"));
+      for (let i = 5; i < path.nodes.length - 1; i += 9) {
+        const p = path.nodes[i], next = path.nodes[i + 1];
+        if (Math.hypot(p.x-d.x,p.z-d.z) > 230) continue;
+        const angle = Math.atan2(next.x-p.x,next.z-p.z);
+        const side = i % 2 ? 1 : -1;
+        const x = p.x + Math.cos(angle) * (path.width / 2 + 7) * side;
+        const z = p.z - Math.sin(angle) * (path.width / 2 + 7) * side;
+        const road = nearestRoad(x,z);
+        if (road.distance < road.width / 2 + 4 || this.solids.some(s => Math.hypot(x-s.x,z-s.z)<Math.max(s.w,s.d)/2+8)) continue;
+        const group = new T.Group();
+        group.position.set(x,terrainHeight(x,z),z);
+        group.rotation.y = angle;
+        cylinder(group,0,3.9,0,0.18,7.8,0x496e70);
+        ring(group,0,7.7,0,0.9,0.10,0x799d97).rotation.x = Math.PI/2;
+        ball(group,0,7.7,0,0.65,0.8,0.65,0xe6d9a3);
+        // Slatted bench and its legs, facing the road.
+        for (let j=0;j<4;j++) box(group,2.8,1.1,-0.6+j*0.4,3.4,0.16,0.30,0xa77d50);
+        for (const bx of [1.6,4]) box(group,bx,0.55,0,0.18,1.1,1.5,0x4d7373);
+        for (const by of [1.7,2.1]) box(group,2.8,by,0.8,3.4,0.25,0.16,0xa77d50);
+        this.scene.add(group);
+        this.decor.push(group);
+        this.addSolid(x,z,0.7,0.7,8);
+      }
+    }
   }
   makeSetPieces() {
     for (const r of this.ramps) {
@@ -560,7 +592,7 @@ export class World {
       texture.magFilter = T.LinearFilter;
       texture.minFilter = T.LinearFilter;
       texture.needsUpdate = true;
-      terrainMaterial = new T.MeshLambertMaterial({ map: texture });
+      terrainMaterial = makeTerrainMaterial(texture);
       for (let i = 0; i < geo.attributes.uv.count; i++)
         geo.attributes.uv.setXY(
           i,
