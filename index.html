@@ -1,70 +1,66 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Patty-wagon</title>
-    <link rel="stylesheet" href="style.css" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#123c46" />
+    <title>Patty Wagon • Free Roam</title>
   </head>
   <body>
-    <main class="app-shell">
-      <section class="panel intro-panel">
-        <p class="eyebrow">Arcade delivery shift</p>
-        <h1>Patty-wagon</h1>
-        <p class="tagline">
-          Keep the grill hot, stack the right ingredients, and send burgers out before the lunch rush
-          overwhelms your truck.
-        </p>
-        <div class="controls-card">
-          <h2>How to play</h2>
-          <ul>
-            <li>Move the truck with <strong>←</strong> and <strong>→</strong>.</li>
-            <li>Catch ingredients that match the active order card.</li>
-            <li>Deliver a full burger to score and extend the timer.</li>
-            <li>Miss too many good ingredients and the shift ends early.</li>
-          </ul>
-        </div>
-        <button id="start-button" class="primary-button">Start lunch rush</button>
-      </section>
-
-      <section class="panel game-panel">
-        <header class="hud">
-          <div>
-            <p class="hud-label">Score</p>
-            <p id="score" class="hud-value">0</p>
-          </div>
-          <div>
-            <p class="hud-label">Time</p>
-            <p id="time" class="hud-value">60</p>
-          </div>
-          <div>
-            <p class="hud-label">Lives</p>
-            <p id="lives" class="hud-value">3</p>
-          </div>
-        </header>
-
-        <section class="order-board" aria-live="polite">
-          <div>
-            <p class="hud-label">Current order</p>
-            <h2 id="order-name">Classic Stack</h2>
-          </div>
-          <p id="order-recipe" class="order-recipe"></p>
-          <p id="order-progress" class="order-progress"></p>
-        </section>
-
-        <section class="playfield-wrapper">
-          <canvas id="game" width="720" height="520" aria-label="Patty-wagon game area"></canvas>
-          <div id="overlay" class="overlay hidden" aria-live="polite">
-            <div class="overlay-card">
-              <h2 id="overlay-title">Ready?</h2>
-              <p id="overlay-copy">Start the lunch rush when you're ready.</p>
-              <button id="overlay-button" class="primary-button">Play again</button>
-            </div>
-          </div>
-        </section>
-      </section>
-    </main>
-
-    <script src="app.js"></script>
+    <canvas id="game" aria-label="3D driving world"></canvas>
+    <header>
+      <div class="brand">
+        PATTY <b>WAGON</b><small id="district">Coral Commons</small>
+      </div>
+      <div class="score">
+        <span class="coin">✦</span> <span id="score">0</span
+        ><small>/ 96 discoveries</small>
+      </div>
+    </header>
+    <aside>
+      <button id="sound" aria-label="Toggle sound">Sound off</button
+      ><button id="pause">Pause</button><button id="reset">Reset car</button>
+    </aside>
+    <div id="toast" role="status"></div>
+    <footer>
+      <div id="speed">0 <small>km/h</small></div>
+      <div class="boost">
+        <span id="upgrade">Boost</span
+        ><meter
+          id="boost"
+          min="0"
+          max="100"
+          value="100"
+          aria-label="Boost energy"
+        ></meter>
+      </div>
+      <button id="help">Controls</button>
+    </footer>
+    <dialog id="menu">
+      <h1>Take the scenic route.</h1>
+      <p>
+        WASD / arrows · drive<br />Space · drift & brake<br />Shift · boost<br />R
+        · reset car<br />Escape · pause
+      </p>
+      <p id="progress"></p>
+      <button id="resume">Keep exploring</button>
+    </dialog>
+    <nav id="touch" aria-label="Driving controls">
+      <div>
+        <button data-key="ArrowLeft" aria-label="Steer left">◀</button
+        ><button data-key="ArrowRight" aria-label="Steer right">▶</button>
+      </div>
+      <div>
+        <button data-key="Space">Drift</button
+        ><button data-key="ShiftLeft">Boost</button
+        ><button data-key="ArrowDown" aria-label="Reverse">▼</button
+        ><button data-key="ArrowUp" aria-label="Accelerate">▲</button>
+      </div>
+    </nav>
+    <div id="error" hidden></div>
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>
