@@ -1,354 +1,911 @@
 import * as T from "three";
-import { districts, ramps } from "./WorldConfig.js";
-const materials = new Map();
-export function mat(color, metalness = 0) {
-  const key = `${color}-${metalness}`;
-  if (!materials.has(key))
-    materials.set(
-      key,
-      new T.MeshStandardMaterial({ color, roughness: 0.65, metalness }),
-    );
-  return materials.get(key);
-}
-export function box(parent, x, y, z, w, h, d, color) {
-  const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat(color));
-  m.position.set(x, y, z);
-  m.castShadow = true;
-  m.receiveShadow = true;
-  parent.add(m);
-  return m;
-}
-export function sphere(parent, x, y, z, r, color, sx = 1, sy = 1, sz = 1) {
-  const m = new T.Mesh(new T.SphereGeometry(r, 16, 10), mat(color));
-  m.position.set(x, y, z);
-  m.scale.set(sx, sy, sz);
-  m.castShadow = true;
-  parent.add(m);
-  return m;
-}
-export function makeCar(color = 0xe69a43, burger = false) {
-  const g = new T.Group();
-  box(g, 0, 0.85, 0, 2.7, 0.7, 4.2, color);
-  box(g, 0, 1.45, -0.3, 2.3, 0.8, 2.3, 0x86d8dc);
-  box(g, 0, 1.88, -0.3, 2.5, 0.15, 2.6, color);
-  box(g, 0, 0.65, -2.15, 2.8, 0.22, 0.25, 0xf5ebd1);
-  box(g, 0, 0.65, 2.15, 2.8, 0.22, 0.25, 0xf5ebd1);
-  for (const x of [-0.9, 0.9])
-    box(g, x, 0.95, -2.17, 0.5, 0.28, 0.08, 0xfff2aa);
-  for (const x of [-1.4, 1.4])
-    for (const z of [-1.3, 1.3]) {
-      const w = new T.Mesh(
-        new T.CylinderGeometry(0.58, 0.58, 0.35, 14),
-        mat(0x183542),
-      );
-      w.rotation.z = Math.PI / 2;
-      w.position.set(x, 0.6, z);
-      g.add(w);
-      sphere(g, x * 1.02, 0.6, z, 0.25, 0xf2d6a1, 0.3, 1, 1);
-    }
-  if (burger) {
-    sphere(g, 0, 2.15, 0, 1.5, 0xc67930, 1, 0.23, 0.9);
-    sphere(g, 0, 2.4, 0, 1.5, 0x6f372b, 1, 0.16, 0.9);
-    box(g, 0, 2.59, 0, 2.6, 0.12, 2.3, 0x8dbb46);
-    sphere(g, 0, 2.82, 0, 1.5, 0xf5b652, 1, 0.38, 0.9);
-    for (let i = 0; i < 15; i++) {
-      const a = i * 2.4,
-        r = 0.2 + (i % 4) * 0.3;
-      sphere(
-        g,
-        Math.sin(a) * r,
-        3.27 - r * 0.18,
-        Math.cos(a) * r,
-        0.07,
-        0xffebad,
-        1.6,
-        0.5,
-        1,
-      );
-    }
-  }
-  return g;
-}
+import {
+  WORLD_SIZE,
+  CHUNK_SIZE,
+  districts,
+  landmarks,
+  ramps,
+  secrets,
+  districtAt,
+} from "./WorldConfig.js";
+import {
+  terrainHeight,
+  rawHeight,
+  colorAt,
+  roadPaths,
+  nearestRoad,
+  rampHeight,
+  hash,
+  clamp,
+} from "./Terrain.js";
+import { generateChunk } from "./ChunkData.js";
+import { SpatialHash } from "./SpatialHash.js";
+import {
+  mat,
+  mesh,
+  box,
+  ball,
+  cylinder,
+  ring,
+  makeLandmark,
+  makeHome,
+  makeFish,
+  makeBoat,
+  makeJelly,
+  makeBarrel,
+  makeArch,
+  floraGeometries,
+  crownGeometry,
+} from "../art/Models.js";
+import { sandTexture } from "../art/Textures.js";
+import { prepareSoftwareScene, setInstance } from "../core/Renderer.js";
+const dummy = new T.Object3D();
 export class World {
-  constructor(scene, save) {
+  constructor(scene, save, { software = false, worker = true } = {}) {
     this.scene = scene;
-    this.ramps = ramps;
+    this.save = save;
+    this.software = software;
+    this.boundary = WORLD_SIZE / 2 - 8;
+    this.ramps = ramps.map((r) => ({ ...r, baseY: terrainHeight(r.x, r.z) }));
     this.solids = [];
+    this.colliderHash = new SpatialHash();
+    this.interactionHash = new SpatialHash();
     this.coins = [];
     this.breakables = [];
     this.traffic = [];
     this.people = [];
-    this.particles = [];
-    this.collected = save.coins.length;
-    this.save = save;
-    box(scene, 0, -0.6, 0, 244, 1, 244, 0x76b5b3);
-    for (const d of districts) {
-      box(scene, d.x, -0.02, 0, 76, 0.12, 236, d.color);
-      box(scene, d.x, 0.08, 0, 14, 0.12, 222, 0x365866);
-    }
-    for (const z of [-75, 0, 75]) {
-      box(scene, 0, 0.08, z, 230, 0.12, 14, 0x365866);
-      for (let x = -108; x <= 108; x += 12)
-        box(scene, x, 0.16, z, 5, 0.02, 0.28, 0xf1de99);
-    }
-    // Repeated architecture detail is instanced to keep draw calls bounded.
-    const windows = [];
-    const trees = [];
-    for (const d of districts)
-      for (const z of [-99, -50, -24, 24, 50, 99])
-        for (const side of [-1, 1]) {
-          const x = d.x + side * 23;
-          const h = 5 + ((Math.abs(z) + d.x + 100) % 13);
-          const color = d.x < 0 ? 0xf1aa88 : d.x > 0 ? 0x477f83 : 0x8a79af;
-          box(scene, x, h / 2, z, 14, h, 15, color);
-          box(scene, x, h + 0.3, z, 15, 0.6, 16, 0xffe0ac);
-          this.solids.push({ x, z, w: 14, d: 15, height: h });
-          for (let y = 2; y < h; y += 3)
-            for (const dx of [-4, 0, 4]) windows.push([x + dx, y, z + 7.55]);
-          box(scene, x, 1, z + 8, 16, 0.2, 3, 0xf0d7b0);
-          for (const dx of [-7, 7]) trees.push([x + dx, z + 12]);
-        }
-    this.instance(windows, new T.BoxGeometry(1.4, 1.8, 0.12), 0xade3d9);
-    this.instance(
-      trees.map(([x, z]) => [x, 1.7, z]),
-      new T.CylinderGeometry(0.3, 0.45, 3.4, 7),
-      0x665756,
-    );
-    this.instance(
-      trees.map(([x, z]) => [x, 4.5, z]),
-      new T.IcosahedronGeometry(2.4, 1),
-      0x3f9e88,
-    );
-    // Landmarks: glowing coral plaza, boardwalk wheel, industrial water tower.
-    sphere(scene, 0, 2, -100, 5, 0xe49fad, 1, 0.5, 1);
-    for (let i = 0; i < 8; i++) {
-      const a = (i * Math.PI) / 4;
-      const stem = box(
-        scene,
-        Math.sin(a) * 5,
-        4,
-        -100 + Math.cos(a) * 5,
-        0.7,
-        8,
-        0.7,
-        0xe89fbe,
-      );
-      stem.rotation.z = Math.sin(a) * 0.5;
-      sphere(scene, Math.sin(a) * 7, 7, -100 + Math.cos(a) * 5, 1.3, 0xffddac);
-    }
-    const wheel = new T.Group();
-    wheel.position.set(-100, 13, -85);
-    const ring = new T.Mesh(new T.TorusGeometry(10, 0.4, 8, 48), mat(0xf5c172));
-    wheel.add(ring);
-    for (let i = 0; i < 10; i++) {
-      const a = (i * Math.PI) / 5;
-      const spoke = box(wheel, 0, 0, 0, 0.15, 20, 0.15, 0xffe9c0);
-      spoke.rotation.z = a;
-      box(wheel, Math.sin(a) * 10, Math.cos(a) * 10, 0, 2, 2, 1.8, 0x9ce4d7);
-    }
-    scene.add(wheel);
-    this.wheel = wheel;
-    box(scene, -100, 5, -85, 0.7, 10, 0.7, 0xf5e3ba);
-    for (const x of [95, 105])
-      for (const z of [-100, -90]) box(scene, x, 8, z, 0.7, 16, 0.7, 0x395a65);
-    sphere(scene, 100, 17, -95, 6, 0xd8ac70, 1, 0.8, 1);
-    box(scene, 100, 21, -95, 12, 1, 12, 0xf0d4a1);
-    box(scene, -110, 0.4, 28, 14, 0.8, 83, 0xb58867);
-    for (let z = -10; z < 68; z += 4)
-      box(scene, -110, 0.86, z, 14, 0.1, 0.2, 0xffd2a6);
-    for (const r of ramps) {
-      const vertices = new Float32Array([
-        -r.width / 2,
-        0,
-        r.length / 2,
-        r.width / 2,
-        0,
-        r.length / 2,
-        -r.width / 2,
-        r.height,
-        -r.length / 2,
-        r.width / 2,
-        r.height,
-        -r.length / 2,
-      ]);
-      const geom = new T.BufferGeometry();
-      geom.setAttribute("position", new T.BufferAttribute(vertices, 3));
-      geom.setIndex([0, 2, 1, 1, 2, 3]);
-      geom.computeVertexNormals();
-      const m = new T.Mesh(
-        geom,
-        new T.MeshStandardMaterial({ color: 0xf4a967, side: T.DoubleSide }),
-      );
-      m.position.set(r.x, 0.18, r.z);
-      m.receiveShadow = true;
-      scene.add(m);
-      for (const x of [-r.width / 2, r.width / 2])
-        box(
-          scene,
-          r.x + x,
-          r.height / 2,
-          r.z - r.length / 2,
-          0.3,
-          r.height,
-          0.3,
-          0xffdfb0,
-        );
-    }
-    const coinGeo = new T.TorusGeometry(0.65, 0.2, 6, 12);
-    for (let district = 0; district < 3; district++)
-      for (let i = 0; i < 32; i++) {
-        const id = district * 32 + i,
-          x =
-            districts[district].x +
-            (i < 20 ? (i % 2 ? 2 : -2) : Math.sin(i * 1.7) * 36),
-          z = i < 20 ? 92 - i * 9 : -88 + (i - 20) * 16;
-        const mesh = new T.Mesh(coinGeo, mat(0xffdb6d, 0.35));
-        mesh.position.set(x, 1.7, z);
-        mesh.visible = !save.coins.includes(id);
-        scene.add(mesh);
-        this.coins.push({ id, mesh, x, z, baseY: 1.7 });
-      }
-    for (let i = 0; i < 42; i++) {
-      const x = districts[i % 3].x + (i % 2 ? 10 : -10),
-        z = -92 + Math.floor(i / 3) * 14;
-      const mesh = box(
-        scene,
-        x,
-        0.75,
-        z,
-        1.5,
-        1.5,
-        1.5,
-        i % 2 ? 0xba7c53 : 0xdf9870,
-      );
-      mesh.visible = !save.broken.includes(i);
-      this.breakables.push({ id: i, mesh, x, z });
-    }
-    for (let i = 0; i < 9; i++) {
-      const mesh = makeCar([0x91d1c3, 0xe6978b, 0xb6a5dc][i % 3]);
-      scene.add(mesh);
-      this.traffic.push({
-        mesh,
-        lane: districts[i % 3].x + 4,
-        phase: i * 24,
-        speed: 5 + (i % 3),
-      });
-    }
-    for (let i = 0; i < 24; i++) {
-      const mesh = new T.Group();
-      box(mesh, 0, 1, 0, 0.6, 1.3, 0.5, i % 2 ? 0xe9c278 : 0x69cabb);
-      sphere(mesh, 0, 1.95, 0, 0.35, 0xf3d0a8);
-      for (const x of [-0.18, 0.18])
-        box(mesh, x, 0.25, 0, 0.2, 0.5, 0.2, 0x345665);
-      scene.add(mesh);
-      this.people.push({
-        mesh,
-        x: districts[i % 3].x + (i % 2 ? 11 : -11),
-        z: -95 + i * 8,
-        phase: i,
-      });
-    }
-    this.secret = new T.Vector3(-108, 0, 64);
-    sphere(scene, -108, 2, 64, 1.3, 0x95f6c6);
-    this.scene.add(new T.HemisphereLight(0xdcf8ff, 0x627f72, 2.4));
-    this.particleMesh = new T.InstancedMesh(
-      new T.IcosahedronGeometry(0.18),
-      mat(0xffdb81),
-      120,
-    );
-    this.particleMesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
-    this.particleMesh.frustumCulled = false;
-    scene.add(this.particleMesh);
-  }
-  instance(points, geometry, color) {
-    const m = new T.InstancedMesh(geometry, mat(color), points.length),
-      dummy = new T.Object3D();
-    points.forEach((p, i) => {
-      dummy.position.set(...p);
-      dummy.updateMatrix();
-      m.setMatrixAt(i, dummy.matrix);
+    this.jellies = [];
+    this.decor = [];
+    this.landmarkObjects = [];
+    this.collected = save.coins.length + (save.legacy?.coins ?? 0);
+    this.collectedIds = new Set(save.coins);
+    this.brokenIds = new Set(save.broken);
+    this.chunks = new Map();
+    this.pending = new Map();
+    this.ready = [];
+    this.queue = [];
+    this.wanted = new Map();
+    this.stamp = 0;
+    this.lastCell = "";
+    this.flora = floraGeometries();
+    this.crownGeo = crownGeometry();
+    this.crownMat = mat(0xffd66a);
+    this.terrainMat = new T.MeshLambertMaterial({
+      vertexColors: true,
+      map: sandTexture(),
     });
-    m.castShadow = true;
-    m.receiveShadow = true;
-    this.scene.add(m);
+    if (worker && typeof Worker !== "undefined")
+      try {
+        this.worker = new Worker(
+          new URL("./TerrainWorker.js", import.meta.url),
+          { type: "module" },
+        );
+        this.worker.onmessage = ({ data }) => {
+          this.pending.delete(data.key);
+          this.ready.push(data);
+        };
+        this.worker.onerror = () => {
+          this.worker.terminate();
+          this.worker = null;
+          for (const entry of this.pending.values()) this.queue.push(entry);
+          this.pending.clear();
+        };
+      } catch {}
+    this.makeGround();
+    this.makeRoads();
+    this.makeLandmarks();
+    this.makeSetPieces();
+    this.makeExploration();
+    this.makeResidents();
+    this.makeAtmosphere();
+  }
+  heightAt(x, z) {
+    let y = terrainHeight(x, z);
+    for (const r of this.ramps) {
+      const h = rampHeight(x, z, r);
+      if (h !== null) y = Math.max(y, h);
+    }
+    return y;
+  }
+  nearbySolids(x, z) {
+    return this.colliderHash.query(x, z, 8);
+  }
+  addSolid(x, z, w, d, height, y = terrainHeight(x, z)) {
+    const s = { x, z, w, d, height, y };
+    this.solids.push(s);
+    this.colliderHash.add(s);
+    return s;
+  }
+  makeGround() {
+    // Coarse continuous floor remains present beneath streamed detail.
+    const geo = new T.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 60, 60);
+    geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position,
+      colors = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i),
+        z = pos.getZ(i);
+      pos.setY(i, rawHeight(x, z) - 3);
+      colors.set(colorAt(x, z), i * 3);
+      geo.attributes.uv.setXY(i, x / 28, z / 28);
+    }
+    geo.setAttribute("color", new T.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    this.floor = mesh(this.scene, geo, this.terrainMat);
+    this.floor.castShadow = false;
+  }
+  makeRoads() {
+    const markings = [];
+    for (const path of roadPaths) {
+      const positions = [],
+        indices = [];
+      path.nodes.forEach((p, i) => {
+        const prev = path.nodes[Math.max(0, i - 1)],
+          next = path.nodes[Math.min(path.nodes.length - 1, i + 1)],
+          dx = next.x - prev.x,
+          dz = next.z - prev.z,
+          length = Math.hypot(dx, dz) || 1;
+        for (const sign of [-1, 1]) {
+          const x = p.x + (((dz / length) * path.width) / 2) * sign,
+            z = p.z - (((dx / length) * path.width) / 2) * sign;
+          positions.push(x, terrainHeight(x, z) + 0.14, z);
+        }
+        if (i) {
+          const a = (i - 1) * 2;
+          indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+        }
+        if (i % 3 === 0)
+          markings.push({
+            x: p.x,
+            y: terrainHeight(p.x, p.z) + 0.19,
+            z: p.z,
+            a: Math.atan2(dx, dz),
+          });
+      });
+      const geo = new T.BufferGeometry();
+      geo.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+      const m = mesh(this.scene, geo, 0x50878b);
+      m.castShadow = false;
+    }
+    const batch = new T.InstancedMesh(
+      new T.BoxGeometry(0.45, 0.025, 4),
+      mat(0xe6d6a0),
+      markings.length,
+    );
+    markings.forEach((p, i) => {
+      dummy.position.set(p.x, p.y, p.z);
+      dummy.rotation.set(0, p.a, 0);
+      dummy.scale.setScalar(1);
+      setInstance(batch, i, dummy);
+    });
+    batch.computeBoundingSphere();
+    this.scene.add(batch);
+  }
+  makeLandmarks() {
+    const sizes = {
+      pineapple: [21, 21, 35],
+      head: [18, 16, 25],
+      rock: [23, 23, 8],
+      krusty: [34, 26, 23],
+      bucket: [24, 24, 35],
+      goober: [45, 32, 41],
+      ship: [36, 62, 40],
+      castle: [66, 43, 49],
+    };
+    for (const l of landmarks) {
+      const group = new T.LOD(),
+        detailed = makeLandmark(l.type),
+        simple = new T.Group();
+      const [w, d, h] = sizes[l.type];
+      if (l.type === "pineapple") {
+        ball(simple, 0, 12, 0, 10, 14, 10, 0xe99a34);
+        for (const x of [-3, 0, 3])
+          mesh(simple, new T.ConeGeometry(3, 13, 5), 0x64a447, x, 29, 0);
+      } else if (l.type === "castle") {
+        box(simple, 0, 12, 0, 48, 24, 24, 0x91c7bc);
+        for (const x of [-27, 27]) {
+          cylinder(simple, x, 18, 0, 7, 36, 0xa0d6cb);
+          mesh(simple, new T.ConeGeometry(8, 15, 7), 0x7facc0, x, 43, 0);
+        }
+      } else if (l.type === "ship") {
+        ball(simple, 0, 8, 0, 18, 10, 30, 0x896148);
+        box(simple, 0, 24, -7, 24, 20, 24, 0x8e7158);
+      } else {
+        ball(
+          simple,
+          0,
+          h * 0.43,
+          0,
+          w * 0.48,
+          h * 0.48,
+          d * 0.48,
+          l.type === "head"
+            ? 0x7393a2
+            : l.type === "rock"
+              ? 0x977e7f
+              : 0xb7ad93,
+        );
+      }
+      group.addLevel(detailed, 0);
+      group.addLevel(simple, this.software ? 190 : 300, 0.08);
+      group.position.set(l.x, terrainHeight(l.x, l.z), l.z);
+      this.scene.add(group);
+      this.landmarkObjects.push(group);
+      this.addSolid(l.x, l.z, w, d, h);
+    }
+    // Small, spaced clusters of marine homes. Road clearances are checked.
+    let id = 0;
+    for (const d of [districts[0], districts[1], districts[3], districts[4]])
+      for (let i = 0; i < 9; i++) {
+        const a = i * 2.4,
+          r = 85 + (i % 3) * 27,
+          x = d.x + Math.cos(a) * r,
+          z = d.z + Math.sin(a) * r;
+        const road = nearestRoad(x, z);
+        if (
+          road.distance < road.width / 2 + 21 ||
+          landmarks.some((l) => Math.hypot(x - l.x, z - l.z) < l.radius + 18) ||
+          this.solids.some(
+            (s) => Math.hypot(x - s.x, z - s.z) < Math.max(s.w, s.d) / 2 + 15,
+          )
+        )
+          continue;
+        const home = makeHome(id++);
+        home.position.set(x, terrainHeight(x, z), z);
+        home.rotation.y = i * 0.7;
+        this.scene.add(home);
+        this.decor.push(home);
+        this.addSolid(x, z, 10, 10, 16);
+      }
+  }
+  makeSetPieces() {
+    for (const r of this.ramps) {
+      const group = new T.Group();
+      group.position.set(r.x, r.baseY, r.z);
+      group.rotation.y = r.heading;
+      const g = new T.BufferGeometry();
+      g.setAttribute(
+        "position",
+        new T.Float32BufferAttribute(
+          [
+            -r.width / 2,
+            0,
+            r.length / 2,
+            r.width / 2,
+            0,
+            r.length / 2,
+            -r.width / 2,
+            r.height,
+            -r.length / 2,
+            r.width / 2,
+            r.height,
+            -r.length / 2,
+          ],
+          3,
+        ),
+      );
+      g.setIndex([0, 2, 1, 1, 2, 3]);
+      g.computeVertexNormals();
+      mesh(group, g, 0xc89160, 0, 0.08, 0);
+      for (const x of [-r.width / 2, r.width / 2]) {
+        box(
+          group,
+          x,
+          r.height / 2,
+          -r.length / 2,
+          0.5,
+          r.height,
+          0.5,
+          0xd7b987,
+        );
+        const rail = box(
+          group,
+          x,
+          r.height / 2 + 0.8,
+          0,
+          0.25,
+          0.25,
+          Math.hypot(r.length, r.height),
+          0xf0d9a0,
+        );
+        rail.rotation.x = Math.atan2(r.height, r.length);
+      }
+      for (let i = 0; i < 3; i++) {
+        const z = 8 - i * 7,
+          y = r.height * (0.5 - z / r.length) + 0.12;
+        box(group, 0, y, z, r.width * 0.75, 0.08, 1.2, 0xf3cf69);
+      }
+      this.scene.add(group);
+    }
+    for (const s of secrets) {
+      const g = new T.Group();
+      g.position.set(s.x, terrainHeight(s.x, s.z), s.z);
+      const arch = makeArch(
+        s.id === "coral-grotto" ? 0xa487ad : 0x85b5b0,
+        20,
+        14,
+      );
+      g.add(arch);
+      ball(g, 0, 3, -9, 2.4, 2.4, 2.4, 0xdaf0bf);
+      for (const x of [-13, 13]) this.addSolid(s.x + x, s.z, 5, 7, 12);
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4;
+        ball(
+          g,
+          Math.cos(a) * 13,
+          0.5,
+          -9 + Math.sin(a) * 13,
+          2,
+          1.4,
+          2,
+          0x88b2a6,
+        );
+      }
+      this.scene.add(g);
+      this.decor.push(g);
+    }
+    // Goo is a patch on the sea floor, not a surface-ocean horizon.
+    const vertices = [],
+      indices = [];
+    const cx = 500,
+      cz = 560;
+    vertices.push(cx, terrainHeight(cx, cz) + 0.18, cz);
+    for (let i = 0; i <= 48; i++) {
+      const a = (i / 48) * Math.PI * 2,
+        x = cx + Math.cos(a) * 77,
+        z = cz + Math.sin(a) * 51;
+      vertices.push(x, terrainHeight(x, z) + 0.18, z);
+      if (i) indices.push(0, i, i + 1);
+    }
+    const geo = new T.BufferGeometry();
+    geo.setAttribute("position", new T.Float32BufferAttribute(vertices, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    mesh(this.scene, geo, mat(0x4ea69b, false, 0.86));
+    // Mountain tunnel is an actual drive-through opening between rock supports.
+    const tunnel = makeArch(0xd5b18e, 34, 22);
+    tunnel.position.set(212, terrainHeight(212, -505), -505);
+    this.scene.add(tunnel);
+    for (const x of [194, 230]) this.addSolid(x, -505, 8, 10, 22);
+    // Visible enclosing reefs make the finite boundary readable.
+    const geoRock = new T.IcosahedronGeometry(1, 1),
+      batch = new T.InstancedMesh(geoRock, mat(0x86b0ab), 88);
+    let k = 0;
+    for (let i = 0; i < 22; i++)
+      for (const edge of [0, 1, 2, 3]) {
+        const v = -880 + i * 84,
+          x = edge < 2 ? (edge ? 884 : -884) : v,
+          z = edge < 2 ? v : edge === 2 ? 884 : -884;
+        const size = 13 + hash(i, edge, 84) * 10;
+        dummy.position.set(x, terrainHeight(x, z) + size * 0.6, z);
+        dummy.rotation.set(0, hash(i, edge) * 6, 0);
+        dummy.scale.set(size, size * 1.5, size);
+        setInstance(batch, k++, dummy);
+        this.addSolid(x, z, size * 1.8, size * 1.8, size * 2.1);
+      }
+    batch.computeBoundingSphere();
+    this.scene.add(batch);
+  }
+  makeExploration() {
+    for (const path of roadPaths) {
+      let index = 0,
+        next = 12;
+      for (const p of path.nodes) {
+        if (p.distance < next) continue;
+        next += 22;
+        const previous = path.nodes[Math.max(0, path.nodes.indexOf(p) - 1)],
+          dx = p.x - previous.x,
+          dz = p.z - previous.z,
+          l = Math.hypot(dx, dz) || 1;
+        const offset = index % 2 ? 3.5 : -3.5,
+          x = p.x + (dz / l) * offset,
+          z = p.z - (dx / l) * offset;
+        this.addCrown(
+          `crown:${path.id}:${index++}`,
+          x,
+          z,
+          terrainHeight(x, z) + 2.0,
+        );
+      }
+    }
+    for (const d of districts)
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2,
+          x = d.x + Math.cos(a) * (44 + (i % 3) * 7),
+          z = d.z + Math.sin(a) * (44 + (i % 3) * 7);
+        if (
+          !this.solids.some(
+            (b) =>
+              Math.abs(x - b.x) < b.w / 2 + 3 &&
+              Math.abs(z - b.z) < b.d / 2 + 3,
+          )
+        )
+          this.addCrown(`crown:${d.id}:${i}`, x, z, terrainHeight(x, z) + 2);
+      }
+    for (const s of secrets)
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4,
+          x = s.x + Math.cos(a) * 8,
+          z = s.z - 9 + Math.sin(a) * 8;
+        this.addCrown(
+          `crown:secret-${s.id}:${i}`,
+          x,
+          z,
+          terrainHeight(x, z) + 2.2,
+        );
+      }
+    for (const r of this.ramps)
+      for (let i = 0; i < 6; i++) {
+        const lx = 0,
+          lz = r.length / 2 - (i * r.length) / 5;
+        const x = r.x + Math.sin(r.heading) * lz,
+          z = r.z + Math.cos(r.heading) * lz;
+        this.addCrown(`crown:${r.id}:${i}`, x, z, this.heightAt(x, z) + 2.3);
+      }
+    for (const d of districts)
+      for (let i = 0; i < 18; i++) {
+        const a = i * 2.3,
+          x = d.x + Math.cos(a) * (22 + (i % 4) * 15),
+          z = d.z + Math.sin(a) * (22 + (i % 4) * 15);
+        if (
+          this.solids.some(
+            (s) =>
+              Math.abs(x - s.x) < s.w / 2 + 3 &&
+              Math.abs(z - s.z) < s.d / 2 + 3,
+          )
+        )
+          continue;
+        const b = {
+          id: `prop:${d.id}:${i}`,
+          x,
+          z,
+          y: terrainHeight(x, z),
+          kind: "barrel",
+        };
+        this.breakables.push(b);
+        this.interactionHash.add(b);
+      }
+    this.objectsByChunk = new Map();
+    for (const item of [...this.coins, ...this.breakables]) {
+      const key = this.chunkKey(item.x, item.z);
+      if (!this.objectsByChunk.has(key)) this.objectsByChunk.set(key, []);
+      this.objectsByChunk.get(key).push(item);
+    }
+  }
+  addCrown(id, x, z, y) {
+    const c = {
+      id,
+      x,
+      z,
+      y,
+      kind: "crown",
+      phase: hash(Math.floor(x), Math.floor(z), 16) * 6,
+    };
+    this.coins.push(c);
+    this.interactionHash.add(c);
+  }
+  chunkKey(x, z) {
+    return `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
+  }
+  makeResidents() {
+    for (const d of districts)
+      for (let i = 0; i < 6; i++) {
+        const a = i * 2.1,
+          x = d.x + Math.cos(a) * 35,
+          z = d.z + Math.sin(a) * 35;
+        if (
+          this.solids.some(
+            (s) =>
+              Math.abs(x - s.x) < s.w / 2 + 4 &&
+              Math.abs(z - s.z) < s.d / 2 + 4,
+          )
+        )
+          continue;
+        const m = makeFish([0xe6ae7d, 0x93c4b0, 0xbd9bc8, 0xdfb676][i % 4]);
+        this.scene.add(m);
+        this.people.push({ mesh: m, x, z, phase: i + d.x * 0.01 });
+      }
+    for (let i = 0; i < 9; i++) {
+      const m = makeBoat([0xa495c0, 0xe1af7b, 0x82b5b9][i % 3]);
+      this.scene.add(m);
+      this.traffic.push({ mesh: m, phase: i / 9, speed: 8 + (i % 3) * 2 });
+    }
+    for (const d of districts)
+      for (let i = 0; i < (d.id === "fields" ? 14 : 4); i++) {
+        const a = i * 2.3,
+          x = d.x + Math.cos(a) * (60 + (i % 4) * 22),
+          z = d.z + Math.sin(a) * (60 + (i % 4) * 22),
+          y = terrainHeight(x, z) + 8 + (i % 3) * 3;
+        const m = makeJelly(i % 2 ? 0xe997be : 0xb29bdb);
+        this.scene.add(m);
+        this.jellies.push({ mesh: m, x, y, z, phase: i });
+      }
+  }
+  makeAtmosphere() {
+    this.bubbles = [];
+    const batch = new T.InstancedMesh(
+      new T.SphereGeometry(0.13, 5, 3),
+      mat(0xc9f8e3, false, 0.36),
+      42,
+    );
+    batch.frustumCulled = false;
+    this.scene.add(batch);
+    this.bubbleMesh = batch;
+    this.particles = [];
+    this.particleMesh = new T.InstancedMesh(
+      new T.IcosahedronGeometry(0.16),
+      mat(0xffd87c),
+      80,
+    );
+    this.particleMesh.frustumCulled = false;
+    this.scene.add(this.particleMesh);
+    if (this.software) {
+      batch.visible = false;
+      this.particleMesh.visible = false;
+    }
+  }
+  createChunk(data) {
+    const key = `${data.cx},${data.cz}`,
+      prior = this.chunks.get(key);
+    if (prior) {
+      this.scene.remove(prior.group);
+      prior.terrain.geometry.dispose();
+    }
+    const group = new T.Group();
+    group.position.set(data.cx * CHUNK_SIZE, 0, data.cz * CHUNK_SIZE);
+    const geo = new T.BufferGeometry();
+    geo.setAttribute("position", new T.BufferAttribute(data.positions, 3));
+    geo.setAttribute("color", new T.BufferAttribute(data.colors, 3));
+    geo.setAttribute("uv", new T.BufferAttribute(data.uv, 2));
+    geo.setIndex(new T.BufferAttribute(data.indices, 1));
+    geo.computeVertexNormals();
+    geo.computeBoundingSphere();
+    const terrain = mesh(group, geo, this.terrainMat);
+    terrain.castShadow = false;
+    const flora = [];
+    for (const type of ["rock", "coral", "kelp"])
+      for (let color = 0; color < 3; color++) {
+        let props = data.props.filter(
+          (p) => p.type === type && p.color === color,
+        );
+        if (this.software)
+          props = props.filter(
+            (p) => hash(Math.floor(p.x), Math.floor(p.z), 62) < 0.3,
+          );
+        if (!props.length) continue;
+        const colors = {
+          rock: [0x98ada1, 0xb9b4a0, 0x9ca9ba],
+          coral: [0xce8bae, 0xe2a180, 0xa597c9],
+          kelp: [0x458f78, 0x69a77e, 0x88ac65],
+        };
+        const batch = new T.InstancedMesh(
+          this.flora[type],
+          mat(colors[type][color]),
+          props.length,
+        );
+        batch.castShadow = false;
+        batch.receiveShadow = true;
+        props.forEach((p, i) => {
+          dummy.position.set(
+            p.x - group.position.x,
+            p.y,
+            p.z - group.position.z,
+          );
+          dummy.rotation.set(0, p.rotation, 0);
+          dummy.scale.setScalar(p.scale);
+          setInstance(batch, i, dummy);
+        });
+        batch.computeBoundingSphere();
+        group.add(batch);
+        flora.push({ batch, props });
+      }
+    const objects = this.objectsByChunk.get(key) ?? [],
+      coins = objects.filter((o) => o.kind === "crown");
+    let crownBatch = null;
+    if (coins.length) {
+      crownBatch = new T.InstancedMesh(
+        this.crownGeo,
+        this.crownMat,
+        coins.length,
+      );
+      crownBatch.instanceMatrix.setUsage(T.DynamicDrawUsage);
+      crownBatch.frustumCulled = false;
+      group.add(crownBatch);
+      coins.forEach((c, i) => {
+        c.slot = i;
+        dummy.position.set(c.x - group.position.x, c.y, c.z - group.position.z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.setScalar(this.collectedIds.has(c.id) ? 0 : 1);
+        setInstance(crownBatch, i, dummy);
+      });
+    }
+    const barrels = [];
+    for (const b of objects.filter((o) => o.kind === "barrel")) {
+      if (this.brokenIds.has(b.id)) continue;
+      const m = makeBarrel();
+      m.position.set(b.x - group.position.x, b.y, b.z - group.position.z);
+      group.add(m);
+      barrels.push({ item: b, mesh: m });
+    }
+    const chunk = {
+      key,
+      group,
+      terrain,
+      segments: data.segments,
+      flora,
+      coins,
+      crownBatch,
+      barrels,
+      used: ++this.stamp,
+    };
+    this.chunks.set(key, chunk);
+    this.scene.add(group);
+    if (this.software) prepareSoftwareScene(group);
+    this.updateChunkCoins(chunk, 0);
+  }
+  ensureAround(x, z, heading = 0, immediate = false) {
+    const cx = Math.floor(x / CHUNK_SIZE),
+      cz = Math.floor(z / CHUNK_SIZE),
+      cell = `${cx},${cz}`;
+    if (cell === this.lastCell && !immediate) return;
+    this.lastCell = cell;
+    this.wanted.clear();
+    const radius = this.software ? 1 : 2;
+    const requests = [];
+    for (let dz = -radius; dz <= radius; dz++)
+      for (let dx = -radius; dx <= radius; dx++) {
+        const a = cx + dx,
+          b = cz + dz;
+        if (
+          a * CHUNK_SIZE > 900 ||
+          b * CHUNK_SIZE > 900 ||
+          (a + 1) * CHUNK_SIZE < -900 ||
+          (b + 1) * CHUNK_SIZE < -900
+        )
+          continue;
+        const segments = this.software
+            ? 8
+            : Math.max(Math.abs(dx), Math.abs(dz)) <= 1
+              ? 32
+              : 8,
+          key = `${a},${b}`;
+        this.wanted.set(key, segments);
+        const loaded = this.chunks.get(key);
+        if (loaded && loaded.segments === segments) {
+          loaded.group.visible = true;
+          loaded.used = ++this.stamp;
+          continue;
+        }
+        if (!this.pending.has(key))
+          requests.push({
+            key,
+            cx: a,
+            cz: b,
+            segments,
+            priority: dx * dx + dz * dz,
+          });
+      }
+    requests.sort((a, b) => a.priority - b.priority);
+    for (const chunk of this.chunks.values())
+      chunk.group.visible = this.wanted.has(chunk.key);
+    this.queue = requests;
+    if (immediate)
+      for (let i = 0; i < Math.min(3, this.queue.length); i++) {
+        const item = this.queue.shift();
+        this.createChunk(generateChunk(item.cx, item.cz, item.segments));
+      }
+  }
+  stream() {
+    // Worker generation never touches Three.js or the DOM. Only one mesh is
+    // assembled per animation frame; fallback generators follow the same budget.
+    if (this.ready.length) {
+      const data = this.ready.shift(),
+        key = `${data.cx},${data.cz}`;
+      const desired = this.wanted.get(key);
+      if (desired === data.segments) this.createChunk(data);
+      else if (desired && !this.pending.has(key))
+        this.queue.push({ key, cx: data.cx, cz: data.cz, segments: desired });
+    }
+    if (this.queue.length && this.pending.size < 3) {
+      const item = this.queue.shift();
+      if (this.worker) {
+        this.pending.set(item.key, item);
+        this.worker.postMessage(item);
+      } else this.createChunk(generateChunk(item.cx, item.cz, item.segments));
+    }
+    while (this.chunks.size > 55) {
+      const old = [...this.chunks.values()]
+        .filter((c) => !c.group.visible)
+        .sort((a, b) => a.used - b.used);
+      const c = old[0];
+      if (c) {
+        this.scene.remove(c.group);
+        c.terrain.geometry.dispose();
+        this.chunks.delete(c.key);
+      } else break;
+    }
+  }
+  updateChunkCoins(chunk, time) {
+    if (!chunk.crownBatch) return;
+    chunk.coins.forEach((c, i) => {
+      dummy.position.set(
+        c.x - chunk.group.position.x,
+        c.y + Math.sin(time * 2 + c.phase) * 0.2,
+        c.z - chunk.group.position.z,
+      );
+      dummy.rotation.set(0, time * 1.1 + c.phase, 0);
+      dummy.scale.setScalar(this.collectedIds.has(c.id) ? 0 : 1);
+      setInstance(chunk.crownBatch, i, dummy);
+    });
+    chunk.crownBatch.instanceMatrix.needsUpdate = true;
   }
   burst(x, y, z) {
+    if (this.software) return;
     for (let i = 0; i < 12; i++) {
-      if (this.particles.length >= 120) this.particles.shift();
+      if (this.particles.length >= 80) this.particles.shift();
       this.particles.push({
         x,
         y,
         z,
-        vx: (Math.random() - 0.5) * 8,
-        vy: 3 + Math.random() * 5,
-        vz: (Math.random() - 0.5) * 8,
+        vx: (Math.random() - 0.5) * 7,
+        vy: 3 + Math.random() * 4,
+        vz: (Math.random() - 0.5) * 7,
         life: 1,
       });
     }
   }
   update(time, dt, vehicle, onCollect, onSmash) {
-    this.wheel.rotation.z = time * 0.09;
-    for (const c of this.coins) {
-      if (!c.mesh.visible) continue;
-      c.mesh.rotation.y = time * 1.8;
-      c.mesh.position.y = c.baseY + Math.sin(time * 3 + c.id) * 0.25;
-      if (Math.hypot(vehicle.x - c.x, vehicle.z - c.z) < 2.4 && vehicle.y < 3) {
-        c.mesh.visible = false;
-        this.burst(c.x, 2, c.z);
+    this.ensureAround(vehicle.x, vehicle.z, vehicle.heading);
+    this.stream();
+    for (const c of this.interactionHash.query(vehicle.x, vehicle.z, 5)) {
+      if (
+        Math.hypot(c.x - vehicle.x, c.z - vehicle.z) > 3.9 ||
+        Math.abs(c.y - vehicle.y - 1.6) > 3.1
+      )
+        continue;
+      if (c.kind === "crown" && !this.collectedIds.has(c.id)) {
+        this.collectedIds.add(c.id);
+        this.collected++;
+        this.burst(c.x, c.y, c.z);
         onCollect(c.id);
       }
-    }
-    for (const b of this.breakables)
       if (
-        b.mesh.visible &&
-        vehicle.y < 2 &&
-        Math.hypot(vehicle.x - b.x, vehicle.z - b.z) < 2.4 &&
-        Math.abs(vehicle.speed) > 3
+        c.kind === "barrel" &&
+        !this.brokenIds.has(c.id) &&
+        Math.abs(vehicle.speed) > 4
       ) {
-        b.mesh.visible = false;
-        this.burst(b.x, 1, b.z);
-        onSmash(b.id);
+        this.brokenIds.add(c.id);
+        this.burst(c.x, c.y + 1, c.z);
+        onSmash(c.id);
       }
+    }
+    for (const chunk of this.chunks.values())
+      if (chunk.group.visible) {
+        this.updateChunkCoins(chunk, time);
+        for (const b of chunk.barrels)
+          b.mesh.visible = !this.brokenIds.has(b.item.id);
+        if (this.software)
+          for (const { batch, props } of chunk.flora)
+            batch.userData.softwareCopies?.forEach(
+              (m, i) =>
+                (m.visible =
+                  Math.hypot(props[i].x - vehicle.x, props[i].z - vehicle.z) <
+                  95),
+            );
+      }
+    for (const m of this.landmarkObjects) {
+      m.visible =
+        Math.hypot(m.position.x - vehicle.x, m.position.z - vehicle.z) <
+        (this.software ? 600 : 1050);
+    }
+    for (const m of this.decor)
+      m.visible =
+        Math.hypot(m.position.x - vehicle.x, m.position.z - vehicle.z) <
+        (this.software ? 230 : 400);
+    const ringPath = roadPaths[0];
     for (const car of this.traffic) {
-      const z = ((time * car.speed + car.phase) % 210) - 105;
-      car.mesh.position.set(car.lane, 0, z);
-      car.mesh.rotation.y = Math.PI;
-      if (
-        vehicle.y < 2 &&
-        Math.hypot(vehicle.x - car.lane, vehicle.z - z) < 3
-      ) {
-        vehicle.speed *= -0.4;
-        vehicle.x -= 2;
+      const distance =
+        (time * car.speed + car.phase * ringPath.length) % ringPath.length;
+      let lo = 0,
+        hi = ringPath.nodes.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (ringPath.nodes[mid].distance < distance) lo = mid + 1;
+        else hi = mid;
+      }
+      const a = ringPath.nodes[Math.max(0, lo - 1)],
+        b = ringPath.nodes[lo],
+        t = clamp(
+          (distance - a.distance) / (b.distance - a.distance || 1),
+          0,
+          1,
+        ),
+        dx = b.x - a.x,
+        dz = b.z - a.z,
+        l = Math.hypot(dx, dz) || 1;
+      const x = a.x + dx * t + (dz / l) * 5,
+        z = a.z + dz * t - (dx / l) * 5;
+      car.mesh.visible =
+        Math.hypot(x - vehicle.x, z - vehicle.z) < (this.software ? 125 : 250);
+      if (car.mesh.visible) {
+        car.mesh.position.set(x, terrainHeight(x, z), z);
+        car.mesh.rotation.y = Math.atan2(-dx, -dz);
+        if (
+          Math.hypot(x - vehicle.x, z - vehicle.z) < 4.7 &&
+          vehicle.y < car.mesh.position.y + 2
+        ) {
+          vehicle.speed *= 0.94;
+        }
       }
     }
     for (const p of this.people) {
-      const close = Math.hypot(vehicle.x - p.x, vehicle.z - p.z) < 9;
+      p.mesh.visible =
+        Math.hypot(p.x - vehicle.x, p.z - vehicle.z) <
+        (this.software ? 90 : 180);
+      if (!p.mesh.visible) continue;
+      const close = Math.hypot(p.x - vehicle.x, p.z - vehicle.z) < 10,
+        x =
+          p.x +
+          Math.sin(time * 0.4 + p.phase) * 3 +
+          (close ? Math.sign(p.x - vehicle.x) * 4 : 0),
+        z = p.z + Math.cos(time * 0.3 + p.phase) * 3;
       p.mesh.position.set(
-        p.x +
-          (close
-            ? Math.sign(p.x - vehicle.x) * 3
-            : Math.sin(time + p.phase) * 0.3),
-        Math.abs(Math.sin(time * 4 + p.phase)) * 0.08,
-        p.z + Math.sin(time * 0.3 + p.phase) * 3,
+        x,
+        terrainHeight(x, z) + Math.abs(Math.sin(time * 4 + p.phase)) * 0.06,
+        z,
       );
-      p.mesh.rotation.z = Math.sin(time * 4 + p.phase) * 0.05;
+      p.mesh.rotation.y = p.phase + Math.sin(time * 0.2) * 0.3;
+      p.mesh.rotation.z = Math.sin(time * 4 + p.phase) * 0.035;
     }
-    this.particles = this.particles.filter((p) => p.life > 0);
-    const dummy = new T.Object3D();
-    for (let i = 0; i < 120; i++) {
-      const p = this.particles[i];
-      if (p) {
-        p.life -= dt;
-        p.vy -= 12 * dt;
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        p.z += p.vz * dt;
-        dummy.position.set(p.x, p.y, p.z);
-        dummy.scale.setScalar(Math.max(0, p.life));
-      } else dummy.scale.setScalar(0);
-      dummy.updateMatrix();
-      this.particleMesh.setMatrixAt(i, dummy.matrix);
+    for (const j of this.jellies) {
+      j.mesh.visible =
+        Math.hypot(j.x - vehicle.x, j.z - vehicle.z) <
+        (this.software ? 140 : 270);
+      if (j.mesh.visible) {
+        j.mesh.position.set(
+          j.x + Math.sin(time * 0.2 + j.phase) * 5,
+          j.y + Math.sin(time + j.phase) * 1.1,
+          j.z,
+        );
+        j.mesh.scale.setScalar(1 + Math.sin(time * 2 + j.phase) * 0.045);
+      }
     }
-    this.particleMesh.instanceMatrix.needsUpdate = true;
+    if (!this.software) {
+      for (let i = 0; i < 42; i++) {
+        const x = vehicle.x + (hash(i, 0, 62) - 0.5) * 120,
+          z = vehicle.z + (hash(i, 1, 62) - 0.5) * 120,
+          y = vehicle.y + ((time * 0.8 + hash(i, 2, 62) * 30) % 30);
+        dummy.position.set(x, y, z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.setScalar(0.4 + hash(i, 3, 62) * 1.1);
+        setInstance(this.bubbleMesh, i, dummy);
+      }
+      this.bubbleMesh.instanceMatrix.needsUpdate = true;
+      this.particles = this.particles.filter((p) => p.life > 0);
+      for (let i = 0; i < 80; i++) {
+        const p = this.particles[i];
+        if (p) {
+          p.life -= dt;
+          p.vy -= 9 * dt;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.z += p.vz * dt;
+          dummy.position.set(p.x, p.y, p.z);
+          dummy.scale.setScalar(Math.max(0, p.life));
+        } else dummy.scale.setScalar(0);
+        dummy.rotation.set(0, 0, 0);
+        setInstance(this.particleMesh, i, dummy);
+      }
+      this.particleMesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+  recover(x, z) {
+    const road = nearestRoad(x, z, true);
+    return { x: road.x, z: road.z, heading: road.heading };
+  }
+  dispose() {
+    this.worker?.terminate();
   }
 }

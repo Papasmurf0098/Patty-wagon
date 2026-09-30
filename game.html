@@ -6,27 +6,63 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta name="theme-color" content="#123c46" />
+    <meta name="theme-color" content="#176f86" />
     <title>Patty Wagon • Free Roam</title>
   </head>
   <body>
+    <div id="water" aria-hidden="true">
+      <svg viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <path
+            id="flower"
+            d="M0,-12 C-55,-95 -112,-55 -40,-9 C-133,-4 -113,66 -29,21 C-46,121 24,122 20,34 C92,99 143,39 40,6 C145,-43 81,-107 18,-26 C4,-42 -9,-40 0,-12 Z"
+          />
+        </defs>
+        <g fill="none" stroke="#83ddd0" stroke-width="5" opacity=".27">
+          <use
+            href="#flower"
+            transform="translate(190 164) scale(1.25) rotate(16)"
+          />
+          <use
+            href="#flower"
+            transform="translate(790 106) scale(.75) rotate(-10)"
+          />
+          <use
+            href="#flower"
+            transform="translate(1180 246) scale(1.4) rotate(23)"
+          />
+          <use
+            href="#flower"
+            transform="translate(480 385) scale(.63) rotate(40)"
+          />
+        </g>
+      </svg>
+    </div>
     <canvas id="game" aria-label="3D driving world"></canvas>
     <header>
       <div class="brand">
-        PATTY <b>WAGON</b><small id="district">Coral Commons</small>
+        PATTY <b>WAGON</b><small id="district">Conch Street</small>
       </div>
       <div class="score">
-        <span class="coin">✦</span> <span id="score">0</span
-        ><small>/ 96 discoveries</small>
+        <span class="coin">♛</span> <span id="score">0</span
+        ><small>/ <span id="total">0</span> crowns</small>
       </div>
     </header>
     <aside>
       <button id="sound" aria-label="Toggle sound">Sound off</button
       ><button id="pause">Pause</button><button id="reset">Reset car</button>
     </aside>
+    <button id="mini-button" aria-label="Open town map" tabindex="-1">
+      <canvas
+        id="minimap"
+        width="168"
+        height="168"
+        aria-label="Town minimap"
+      ></canvas>
+    </button>
     <div id="toast" role="status"></div>
     <footer>
-      <div id="speed">0 <small>km/h</small></div>
+      <div id="speed"><span id="speed-value">0</span> <small>km/h</small></div>
       <div class="boost">
         <span id="upgrade">Boost</span
         ><meter
@@ -37,16 +73,41 @@
           aria-label="Boost energy"
         ></meter>
       </div>
-      <button id="help">Controls</button>
+      <button id="map">Town map</button><button id="help">Controls</button>
     </footer>
     <dialog id="menu">
       <h1>Take the scenic route.</h1>
       <p>
         WASD / arrows · drive<br />Space · drift & brake<br />Shift · boost<br />R
-        · reset car<br />Escape · pause
+        · return to nearest road<br />M · town map<br />Escape · pause
       </p>
       <p id="progress"></p>
+      <p id="legacy"></p>
       <button id="resume">Keep exploring</button>
+    </dialog>
+    <dialog id="atlas">
+      <div class="map-heading">
+        <div>
+          <small>BIKINI BOTTOM</small>
+          <h1>The whole town is yours.</h1>
+        </div>
+        <button id="close-map" aria-label="Close town map">Close</button>
+      </div>
+      <div class="atlas-layout">
+        <canvas
+          id="town-map"
+          width="600"
+          height="600"
+          aria-label="Full town map"
+        ></canvas>
+        <div>
+          <p class="map-instruction">
+            Choose an area to start exploring there.
+          </p>
+          <div id="area-list"></div>
+        </div>
+      </div>
+      <p id="map-progress"></p>
     </dialog>
     <nav id="touch" aria-label="Driving controls">
       <div>

@@ -1,62 +1,63 @@
 import * as T from "three";
 import { SVGRenderer } from "three/addons/renderers/SVGRenderer.js";
-
 export function createRenderer(canvas) {
-  try {
-    const renderer = new T.WebGLRenderer({
-      canvas,
-      antialias: true,
-      powerPreference: "default",
-    });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = T.PCFSoftShadowMap;
-    renderer.outputColorSpace = T.SRGBColorSpace;
-    renderer.toneMapping = T.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
-    return { renderer, software: false };
-  } catch {
-    const renderer = new SVGRenderer();
-    renderer.setQuality("low");
-    renderer.domElement.id = "game";
-    renderer.domElement.setAttribute("role", "img");
-    renderer.domElement.setAttribute("aria-label", "3D driving world");
-    canvas.replaceWith(renderer.domElement);
-    return { renderer, software: true };
-  }
+  const preferSoftware =
+    new URLSearchParams(location.search).get("renderer") === "software";
+  if (!preferSoftware)
+    try {
+      const renderer = new T.WebGLRenderer({
+        canvas,
+        antialias: true,
+        alpha: true,
+        powerPreference: "high-performance",
+      });
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = T.PCFSoftShadowMap;
+      renderer.outputColorSpace = T.SRGBColorSpace;
+      renderer.toneMapping = T.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.1;
+      renderer.setClearColor(0, 0);
+      return { renderer, software: false };
+    } catch {}
+  const renderer = new SVGRenderer();
+  renderer.setQuality("low");
+  renderer.domElement.id = "game";
+  renderer.domElement.setAttribute("role", "img");
+  renderer.domElement.setAttribute("aria-label", "Underwater driving world");
+  canvas.replaceWith(renderer.domElement);
+  return { renderer, software: true };
 }
-
-// SVG needs individual transforms; GPU rendering keeps efficient instancing.
-export function prepareSoftwareScene(scene, particleMesh) {
+export function prepareSoftwareScene(root) {
   const instances = [];
-  scene.traverse((node) => {
-    if (node.isInstancedMesh) instances.push(node);
+  root.traverse((n) => {
+    if (n.isInstancedMesh && !n.userData.softwareCopies) instances.push(n);
   });
   const transform = new T.Matrix4();
-  for (const mesh of instances) {
-    mesh.visible = false;
-    if (mesh === particleMesh) continue;
+  for (const batch of instances) {
+    batch.visible = false;
+    const copies = [];
     const group = new T.Group();
-    group.position.copy(mesh.position);
-    group.quaternion.copy(mesh.quaternion);
-    group.scale.copy(mesh.scale);
-    for (let i = 0; i < mesh.count; i++) {
-      mesh.getMatrixAt(i, transform);
-      const copy = new T.Mesh(mesh.geometry, mesh.material);
-      transform.decompose(copy.position, copy.quaternion, copy.scale);
-      group.add(copy);
+    group.position.copy(batch.position);
+    batch.parent.add(group);
+    for (let i = 0; i < batch.count; i++) {
+      const m = new T.Mesh(batch.geometry, batch.material);
+      batch.getMatrixAt(i, transform);
+      transform.decompose(m.position, m.quaternion, m.scale);
+      group.add(m);
+      copies.push(m);
     }
-    scene.add(group);
+    batch.userData.softwareCopies = copies;
   }
-  // Reduced tessellation keeps the compatibility renderer responsive.
-  scene.traverse((node) => {
-    if (!node.isMesh) return;
-    if (node.geometry.type === "SphereGeometry") {
-      node.geometry = new T.SphereGeometry(
-        node.geometry.parameters.radius,
-        8,
-        6,
-      );
-    }
-  });
+}
+export function setInstance(batch, index, object) {
+  object.updateMatrix();
+  batch.setMatrixAt(index, object.matrix);
+  const copy = batch.userData.softwareCopies?.[index];
+  if (copy) {
+    copy.position.copy(object.position);
+    copy.quaternion.copy(object.quaternion);
+    copy.scale.copy(object.scale);
+    copy.visible = object.scale.x > 0;
+  }
 }

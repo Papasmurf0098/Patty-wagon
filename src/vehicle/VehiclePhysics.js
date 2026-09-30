@@ -1,85 +1,130 @@
-export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-export function groundHeight(x, z, ramps) {
-  for (const r of ramps)
-    if (
-      Math.abs(x - r.x) < r.width / 2 &&
-      z >= r.z - r.length / 2 &&
-      z <= r.z + r.length / 2
-    )
-      return (r.height * (r.z + r.length / 2 - z)) / r.length;
-  return 0;
+import { terrainHeight, rampHeight, clamp } from "../world/Terrain.js";
+import { WORLD_SIZE, spawnFor } from "../world/WorldConfig.js";
+export { clamp };
+// Exported for ramp and surface continuity checks; world ground uses terrain too.
+export function groundHeight(x, z, ramps = [], terrain = () => 0) {
+  let y = terrain(x, z);
+  for (const r of ramps) {
+    const h = rampHeight(x, z, { baseY: 0, ...r });
+    if (h !== null) y = Math.max(y, h);
+  }
+  return y;
+}
+function surface(world, x, z) {
+  return world.heightAt
+    ? world.heightAt(x, z)
+    : groundHeight(x, z, world.ramps ?? []);
 }
 export function stepVehicle(s, input, dt, world) {
-  const prevY = s.y;
-  const ground = groundHeight(s.x, s.z, world.ramps);
-  const grounded = s.y <= ground + 0.08 && s.vy <= 0;
+  dt = Math.min(Math.max(dt, 0), 0.05);
+  const ground = surface(world, s.x, s.z),
+    wasGrounded = s.y <= ground + 0.18 && s.vy <= 0;
   const boost = input.boost && input.throttle > 0 && s.energy > 1;
-  const level = world.collected >= 50 ? 2 : world.collected >= 25 ? 1 : 0;
-  s.energy = clamp(s.energy + (boost ? -32 : 18) * dt, 0, 100);
-  s.speed += input.throttle * (boost ? 36 : 23) * dt;
-  s.speed *= Math.exp(-(input.brake ? 3.4 : input.throttle ? 0.25 : 1.05) * dt);
-  s.speed = clamp(s.speed, -12, (boost ? 43 : 29) + level * 3);
+  const level = world.collected >= 80 ? 2 : world.collected >= 30 ? 1 : 0;
+  s.energy = clamp(s.energy + (boost ? -26 : 16) * dt, 0, 100);
+  s.speed += input.throttle * (boost ? 32 : 21) * dt;
+  s.speed *= Math.exp(-(input.brake ? 2.6 : input.throttle ? 0.25 : 0.8) * dt);
+  s.speed = clamp(s.speed, -12, (boost ? 43 : 27) + level * 3);
   s.heading -=
     input.steer *
-    (input.brake ? 2.1 : 1.45) *
-    (s.speed / 18) *
+    (input.brake ? 2.15 : 1.42) *
+    clamp(s.speed / 18, -1, 1.2) *
     dt *
-    (grounded ? 1 : 0.35);
-  const desiredX = -Math.sin(s.heading) * s.speed,
-    desiredZ = -Math.cos(s.heading) * s.speed;
-  const grip = 1 - Math.exp(-(input.brake ? 2.3 : 8 + level) * dt);
-  s.vx += (desiredX - s.vx) * grip;
-  s.vz += (desiredZ - s.vz) * grip;
+    (wasGrounded ? 1 : 0.38);
+  const grip = 1 - Math.exp(-(input.brake ? 2.4 : 8 + level) * dt);
+  s.vx += (-Math.sin(s.heading) * s.speed - s.vx) * grip;
+  s.vz += (-Math.cos(s.heading) * s.speed - s.vz) * grip;
   const oldX = s.x,
     oldZ = s.z;
-  s.x = clamp(s.x + s.vx * dt, -115, 115);
-  s.z = clamp(s.z + s.vz * dt, -115, 115);
-  const nextGround = groundHeight(s.x, s.z, world.ramps);
-  if (grounded && ground > 0 && nextGround < ground - 0.3 && s.speed > 8)
-    s.vy = 8 + Math.abs(s.speed) * 0.22;
-  if (grounded && nextGround >= ground - 0.3) {
+  s.x += s.vx * dt;
+  s.z += s.vz * dt;
+  const limit = world.boundary ?? WORLD_SIZE / 2 - 8;
+  if (Math.abs(s.x) > limit || Math.abs(s.z) > limit) {
+    s.x = clamp(s.x, -limit, limit);
+    s.z = clamp(s.z, -limit, limit);
+    s.speed *= -0.2;
+    s.vx *= -0.2;
+    s.vz *= -0.2;
+  }
+  const nextGround = surface(world, s.x, s.z);
+  const onRamp = world.ramps?.some(
+    (r) => rampHeight(oldX, oldZ, { baseY: 0, ...r }) !== null,
+  );
+  let launched = false,
+    landed = false;
+  if (wasGrounded && ground - nextGround > 0.65 && Math.abs(s.speed) > 8) {
+    s.vy = (onRamp ? 8 : 2) + Math.abs(s.speed) * (onRamp ? 0.22 : 0.1);
+    launched = true;
+  }
+  if (wasGrounded && !launched) {
     s.y = nextGround;
     s.vy = 0;
   } else {
     s.vy -= 24 * dt;
     s.y += s.vy * dt;
-    if (s.y < nextGround) {
+    if (s.y <= nextGround) {
       s.y = nextGround;
       s.vy = 0;
+      landed = true;
     }
   }
-  for (const b of world.solids)
+  const solids = world.nearbySolids
+    ? world.nearbySolids(s.x, s.z)
+    : (world.solids ?? []);
+  for (const b of solids)
     if (
-      s.y < b.height &&
-      Math.abs(s.x - b.x) < b.w / 2 + 1.4 &&
-      Math.abs(s.z - b.z) < b.d / 2 + 1.8
+      s.y < (b.y ?? 0) + b.height &&
+      s.y + 2.6 > (b.y ?? 0) &&
+      Math.abs(s.x - b.x) < b.w / 2 + 2.0 &&
+      Math.abs(s.z - b.z) < b.d / 2 + 2.1
     ) {
       s.x = oldX;
       s.z = oldZ;
-      s.speed *= -0.25;
-      s.vx *= -0.3;
-      s.vz *= -0.3;
+      s.speed *= -0.22;
+      s.vx *= -0.2;
+      s.vz *= -0.2;
       break;
     }
-  if (!Number.isFinite(s.y) || s.y < -10) {
-    s.x = 0;
-    s.z = 34;
-    s.y = 0;
-    s.vy = 0;
-    s.speed = 0;
+  if (
+    !["x", "z", "y", "heading", "speed", "vx", "vz", "vy"].every((k) =>
+      Number.isFinite(s[k]),
+    )
+  )
+    Object.assign(s, initialVehicle());
+  s.grounded = s.y <= surface(world, s.x, s.z) + 0.18;
+  // Wheel samples align the burger body with grades without changing Y-up driving.
+  const fwdX = -Math.sin(s.heading),
+    fwdZ = -Math.cos(s.heading),
+    rightX = Math.cos(s.heading),
+    rightZ = -Math.sin(s.heading);
+  if (s.grounded) {
+    const front = surface(world, s.x + fwdX * 1.5, s.z + fwdZ * 1.5),
+      back = surface(world, s.x - fwdX * 1.5, s.z - fwdZ * 1.5);
+    const left = surface(world, s.x - rightX * 1.8, s.z - rightZ * 1.8),
+      right = surface(world, s.x + rightX * 1.8, s.z + rightZ * 1.8);
+    s.pitch +=
+      (Math.atan2(front - back, 3) - s.pitch) * (1 - Math.exp(-10 * dt));
+    s.roll +=
+      (Math.atan2(right - left, 3.6) - s.roll) * (1 - Math.exp(-10 * dt));
+  } else {
+    s.pitch *= Math.exp(-2 * dt);
+    s.roll *= Math.exp(-2 * dt);
   }
-  return { boost, landed: prevY > nextGround + 0.8 && s.y === nextGround };
+  return { boost, landed, launched };
 }
-export function initialVehicle() {
+export function initialVehicle(spawn = spawnFor(), height = terrainHeight) {
   return {
-    x: 0,
-    y: 0,
-    z: 34,
-    heading: 0,
+    x: spawn.x,
+    y: height(spawn.x, spawn.z),
+    z: spawn.z,
+    heading: spawn.heading ?? 0,
     speed: 0,
     vx: 0,
     vz: 0,
     vy: 0,
     energy: 100,
+    pitch: 0,
+    roll: 0,
+    grounded: true,
   };
 }
