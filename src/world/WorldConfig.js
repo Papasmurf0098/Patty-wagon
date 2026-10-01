@@ -1,6 +1,6 @@
 export const WORLD_SEED = 200411;
 export const WORLD_VERSION = 2;
-export const WORLD_SIZE = 1800;
+export const WORLD_SIZE = 2400;
 export const CHUNK_SIZE = 128;
 export const districts = [
   {
@@ -141,6 +141,83 @@ export const routes = [
     ],
   },
 ];
+export const frontierSites = [
+  {
+    id: "lantern-harbor",
+    name: "Lantern Harbor",
+    kind: "harbor",
+    x: 1040,
+    z: 620,
+    radius: 58,
+    color: 0xffd392,
+  },
+  {
+    id: "abyss-relay",
+    name: "Abyss Relay",
+    kind: "relay",
+    x: 1080,
+    z: -500,
+    radius: 58,
+    color: 0x7fdde5,
+  },
+  {
+    id: "driftwood-camp",
+    name: "Driftwood Research Camp",
+    kind: "camp",
+    x: -1060,
+    z: -900,
+    radius: 58,
+    color: 0xbac7ff,
+  },
+];
+routes.push(
+  {
+    id: "east-harbor",
+    frontier: true,
+    width: 22,
+    points: [
+      [730, 310],
+      [880, 390],
+      [1040, 470],
+      [1040, 620],
+    ],
+  },
+  {
+    id: "outer-coast",
+    frontier: true,
+    width: 22,
+    points: [
+      [1040, 620],
+      [1040, 780],
+      [1130, 650],
+      [1140, 100],
+      [1080, -330],
+      [1080, -500],
+    ],
+  },
+  {
+    id: "relay-link",
+    frontier: true,
+    width: 22,
+    points: [
+      [700, -140],
+      [900, -190],
+      [1080, -350],
+      [1080, -500],
+    ],
+  },
+  {
+    id: "western-expedition",
+    frontier: true,
+    width: 22,
+    points: [
+      [-700, -420],
+      [-900, -480],
+      [-1060, -700],
+      [-1060, -900],
+    ],
+  },
+);
 export const landmarks = [
   { id: "pineapple", type: "pineapple", x: -468, z: 295, radius: 21 },
   { id: "squidward", type: "head", x: -386, z: 350, radius: 19 },

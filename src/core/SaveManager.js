@@ -1,5 +1,7 @@
 import {
   WORLD_SEED,
+  WORLD_SIZE,
+  frontierSites,
   WORLD_VERSION,
   districts,
   secrets,
@@ -25,6 +27,8 @@ function fresh(legacy = null) {
     bestStunts: {},
     discoveries: [],
     keepsakes: [],
+    deliveries: [],
+    cargo: null,
     visited: [],
     secrets: [],
     position: null,
@@ -52,6 +56,14 @@ export function loadSave(storage) {
         : null);
     const out = fresh(legacy);
     if (raw?.version !== WORLD_VERSION || raw?.seed !== WORLD_SEED) return out;
+    out.deliveries = unique(raw.deliveries, (v) =>
+      frontierSites.some((s) => s.id === v),
+    );
+    out.cargo =
+      frontierSites.some((s) => s.id === raw.cargo) &&
+      !out.deliveries.includes(raw.cargo)
+        ? raw.cargo
+        : null;
     out.coins = unique(raw.coins, id("crown"));
     out.broken = unique(raw.broken, id("prop"));
     out.activities = unique(raw.activities, (v) =>
@@ -91,7 +103,8 @@ export function loadSave(storage) {
     if (
       raw.position &&
       ["x", "z", "heading"].every((k) => Number.isFinite(raw.position[k])) &&
-      Math.max(Math.abs(raw.position.x), Math.abs(raw.position.z)) < 875
+      Math.max(Math.abs(raw.position.x), Math.abs(raw.position.z)) <
+        WORLD_SIZE / 2 - 25
     )
       out.position = {
         x: raw.position.x,

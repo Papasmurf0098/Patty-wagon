@@ -4,6 +4,7 @@ import { districtDetails } from "./DistrictDetails.js";
 import { discoverySites, distanceToDiscoveryPath } from "./DiscoveryPlan.js";
 import {
   CHUNK_SIZE,
+  frontierSites,
   landmarks,
   ramps,
   secrets,
@@ -89,6 +90,9 @@ export function generateChunk(cx, cz, segments = 32) {
         continue;
       const road = nearestRoad(p.x, p.z);
       if (
+        frontierSites.some(
+          (s) => Math.hypot(p.x - s.x, p.z - s.z) < s.radius + 8,
+        ) ||
         ramps.some((r) => inRampCorridor(p.x, p.z, r)) ||
         secrets.some((s) => Math.hypot(p.x - s.x, p.z - s.z) < 23) ||
         livingSites.some(

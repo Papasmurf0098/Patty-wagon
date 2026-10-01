@@ -1,6 +1,7 @@
 import * as T from "three";
 import {
   WORLD_SIZE,
+  frontierSites,
   CHUNK_SIZE,
   districts,
   landmarks,
@@ -61,6 +62,8 @@ import { makeDiscoverySite } from "../art/DiscoveryAssets.js";
 import { stuntTargets } from "./StuntProgress.js";
 import { destinationCollections } from "./DestinationCollections.js";
 import { makeDestinationToken } from "../art/DestinationTokens.js";
+import { supplyRuns } from "./SupplyRuns.js";
+import { makeFrontierSite } from "../art/FrontierAssets.js";
 const dummy = new T.Object3D();
 const contactMaterial = new T.MeshBasicMaterial({
   color: 0x23444a,
@@ -92,6 +95,8 @@ export class World {
     this.platforms = [];
     this.discoveryObjects = [];
     this.destinationTokens = [];
+    this.frontierObjects = [];
+    this.supplyPads = [];
     this.stuntRings = [];
     this.collected = save.coins.length + (save.legacy?.coins ?? 0);
     this.collectedIds = new Set(save.coins);
@@ -136,6 +141,7 @@ export class World {
     this.makeDistrictDetails();
     this.makeScenicGates();
     this.makeDiscoveries();
+    this.makeFrontier();
     this.makeStuntRings();
     this.makeExploration();
     this.makeResidents();
@@ -569,6 +575,24 @@ export class World {
         });
       });
   }
+  makeFrontier() {
+    for (const run of supplyRuns) {
+      const p = run.source,
+        group = new T.Group();
+      const pad = ring(group, 0, 0.12, 0, 7, 0.2, 0xffd392);
+      pad.rotation.x = Math.PI / 2;
+      group.position.set(p.x, terrainHeight(p.x, p.z), p.z);
+      this.scene.add(group);
+      this.supplyPads.push({ id: run.id, group });
+    }
+    for (const site of frontierSites) {
+      const { group, solids, lamp } = makeFrontierSite(site);
+      this.scene.add(group, lamp);
+      this.decor.push(group);
+      this.frontierObjects.push({ ...site, group, lamp });
+      for (const b of solids) this.addSolid(b.x, b.z, b.w, b.d, b.height, b.y);
+    }
+  }
   makeDiscoveries() {
     for (const collection of destinationCollections)
       for (const item of collection.items) {
@@ -776,9 +800,10 @@ export class World {
     let k = 0;
     for (let i = 0; i < 22; i++)
       for (const edge of [0, 1, 2, 3]) {
-        const v = -880 + i * 84,
-          x = edge < 2 ? (edge ? 884 : -884) : v,
-          z = edge < 2 ? v : edge === 2 ? 884 : -884;
+        const edgeLimit = WORLD_SIZE / 2 - 16,
+          v = -edgeLimit + i * ((edgeLimit * 2) / 21),
+          x = edge < 2 ? (edge ? edgeLimit : -edgeLimit) : v,
+          z = edge < 2 ? v : edge === 2 ? edgeLimit : -edgeLimit;
         const size = 13 + hash(i, edge, 84) * 10;
         dummy.position.set(x, terrainHeight(x, z) + size * 0.6, z);
         dummy.rotation.set(0, hash(i, edge) * 6, 0);
@@ -790,7 +815,7 @@ export class World {
     this.scene.add(batch);
   }
   makeExploration() {
-    for (const path of roadPaths) {
+    for (const path of roadPaths.filter((p) => !p.frontier)) {
       let index = 0,
         next = 12;
       for (const p of path.nodes) {
@@ -901,6 +926,20 @@ export class World {
     return `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
   }
   makeResidents() {
+    for (const site of frontierSites)
+      for (const side of [-1, 1]) {
+        const m = makeFish(side < 0 ? 0xd9b183 : 0x9bc8c0);
+        this.scene.add(m);
+        this.people.push({
+          mesh: m,
+          x: site.x - 18,
+          z: site.z + side * 18,
+          phase: side + site.x,
+          heading: Math.PI / 2,
+          path: true,
+          frontier: true,
+        });
+      }
     for (const path of discoveryPaths)
       for (let i = 0; i < 4; i++) {
         const m = makeFish([0xcfb08a, 0xb0b3d6, 0x94c0b2, 0xd1a1bc][i]);
@@ -1163,10 +1202,10 @@ export class World {
         const a = cx + dx,
           b = cz + dz;
         if (
-          a * CHUNK_SIZE > 900 ||
-          b * CHUNK_SIZE > 900 ||
-          (a + 1) * CHUNK_SIZE < -900 ||
-          (b + 1) * CHUNK_SIZE < -900
+          a * CHUNK_SIZE > WORLD_SIZE / 2 ||
+          b * CHUNK_SIZE > WORLD_SIZE / 2 ||
+          (a + 1) * CHUNK_SIZE < -WORLD_SIZE / 2 ||
+          (b + 1) * CHUNK_SIZE < -WORLD_SIZE / 2
         )
           continue;
         const segments = this.software
@@ -1269,6 +1308,22 @@ export class World {
   }
   update(time, dt, vehicle, onCollect, onSmash) {
     updateVisualTime(time);
+    for (const pad of this.supplyPads)
+      pad.group.visible =
+        !this.save.deliveries.includes(pad.id) &&
+        this.save.cargo !== pad.id &&
+        Math.hypot(
+          pad.group.position.x - vehicle.x,
+          pad.group.position.z - vehicle.z,
+        ) < 180;
+    for (const site of this.frontierObjects) {
+      site.lamp.visible =
+        Math.hypot(site.x - vehicle.x, site.z - vehicle.z) <
+        (this.software ? 230 : 400);
+      site.lamp.material.color.setHex(
+        this.save.deliveries.includes(site.id) ? site.color : 0x466165,
+      );
+    }
     for (const token of this.destinationTokens) {
       token.group.visible =
         !this.save.keepsakes.includes(token.id) &&

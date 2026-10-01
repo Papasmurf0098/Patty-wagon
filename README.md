@@ -6,15 +6,15 @@ Drive a hamburger wagon through a broad, connected underwater town inspired by t
 
 [Open the game](https://papasmurf0098.github.io/Patty-wagon/).
 
-WASD / arrows drive. Space brakes and drifts. Shift boosts. R recovers to the nearest road. M opens the town map. Escape pauses. Touch controls support steering, acceleration, reverse, drift, and boost together. Sound is opt-in.
+WASD / arrows drive. Space brakes and drifts. Shift boosts. R recovers to the nearest road. M opens the town map. E loads supplies, restores beacons, or recharges boost at a restored station. Escape pauses. Touch controls support steering, acceleration, reverse, drift, and boost together. Sound is opt-in.
 
 The town map shows the full connected network and lets you start exploring in any of the seven areas. Progress saves in the browser. The previous compact town's save remains archived under its original key, with its collected crowns counted toward wagon upgrade credit.
 
 ## This revision
 
-- A 1,800 × 1,800-unit seafloor map, replacing the previous 230-unit driving boundary.
+- A 2,400 × 2,400-unit seafloor map, replacing the previous 230-unit driving boundary.
 - Seven connected areas: Conch Street, Restaurant Commons, Jellyfish Fields, Goo Lagoon, Wreck Cove, Sand Mountain, and Neptune Terrace.
-- A 4.5 km main loop and approximately 8.9 km of roads overall, using the design convention of one world unit per meter.
+- A 4.5 km main loop and approximately 12.2 km of roads overall, using the design convention of one world unit per meter.
 - A hamburger-body wagon with an open upper-bun seating area, two passengers, sesame seeds, integrated wheels, a pickle flag, and animated propeller.
 - Individually modeled pineapple, stone-head and rock homes, Krusty Krab, Chum Bucket, Goofy Goober, Thug Tug, and Neptune's castle.
 - 612 crowns, 123 breakable barrels, nine ramps, seven secret locations, three exploration milestones, nine boat vehicles, 40 fish residents, and 38 jellyfish.
@@ -51,7 +51,7 @@ See [the current design](docs/DESIGN.md) and [the approved correction plan](docs
 
 ## Validation and limits
 
-Forty-three automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
+Forty-seven automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
 
 The deployed game was visually reviewed in SVG compatibility mode across all seven areas. The town map's area controls and the seven-area exploration milestone were also checked. Desktop WebGL rendering and real-phone performance are not yet measured. SVG mode is a compatibility view and has less scenery, no shadows or particle effects, and a lower render frequency. It is not a benchmark for WebGL quality. General seafloor collision follows terrain and ramps; caves are drive-through arches rather than a volumetric cave system, traffic is kinematic, and breakage uses particles rather than rigid-body fragments.
 
@@ -103,3 +103,13 @@ Tidepool Gardens, Anchor Salvage Yard, and Old Shell Sanctuary now have optional
 Conch Hop now angles away from the pineapple so upgraded boosted flights can land cleanly. Scenic gates ignore initial positions after recovery or reload and require actual movement. Collection tracking also rejects parked, airborne, elevated, and teleport passes.
 
 All 43 checks pass. Stunt coverage now runs all nine ramps with and without boost at all three upgrade tiers (54 streamed driving simulations). Additional checks cover collection reachability, one-time rewards, token visibility, invalid saves, and partial progress restoration. Production bundling passes. A geometry-only review checked the new token placement; real-browser WebGL and phone performance remain unverified.
+
+## Outer waters, supply runs, and lighting — October 1, 2026
+
+The world grows from 1,800 to 2,400 units per side, increasing its area by about 78%. Four new roads add 3.28 km of connected driving. Lantern Harbor adds mooring structures and cargo, Abyss Relay adds a domed communications building and dish, and Driftwood Research Camp adds cabins and six new station workers across the three locations. Each station has a beacon tower, supply pad, storage props, reserved scenery space, and map travel. Terrain streaming, save-position bounds, and the enclosing reef now follow the larger world size.
+
+Three optional, untimed supply runs start at Tidepool Gardens, Anchor Salvage Yard, and Old Shell Sanctuary. Stop on a marked loading pad and press E or tap the contextual button. Drive to the named outer station and unload to restore its beacon. Restored stations recharge boost when stopped. Cargo and completed deliveries persist; map travel returns cargo to its depot, while nearby-road recovery preserves it. Map rings and destination descriptions identify the current delivery and pickup locations. Existing crowns and upgrades remain intact.
+
+Outer waters gradually shift toward cooler blue fog with reduced direct sunlight and readable ambient fill. Automatic terrain-aimed headlights strengthen outside the town. Restored beacons illuminate their surroundings using at most two nearby point lights, with no additional shadow maps. Software rendering retains brighter ambient lighting and omits these extra lights. The existing moving water-light shader and sun shadows remain.
+
+Validation: 47 tests cover existing gameplay plus frontier streaming, road clearance, cargo rules, recharge service, expanded saves, and lighting transitions. Production bundling passes. New station geometry was reviewed in SVG projection; final WebGL lighting appearance, touchscreen interaction, and real-phone frame times have not been visually verified. The larger bundle still triggers Vite's existing 500 kB advisory.

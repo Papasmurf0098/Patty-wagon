@@ -425,3 +425,21 @@ footer {
     animation: none;
   }
 }
+
+#interact {
+  position: fixed;
+  z-index: 8;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 155px;
+  max-width: min(90vw, 440px);
+  padding: 12px 18px;
+  background: #123c49ed;
+  color: #ffe2a7;
+  border: 1px solid #a8ddd0;
+  border-radius: 16px;
+  font-size: 13px;
+}
+#interact[hidden] {
+  display: none;
+}

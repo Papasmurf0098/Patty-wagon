@@ -5,6 +5,7 @@ import { World } from "./world/World.js";
 import { makeWagon } from "./art/Models.js";
 import {
   districts,
+  frontierSites,
   secrets,
   spawnFor,
   WORLD_SIZE,
@@ -21,6 +22,12 @@ import {
   destinationCollections,
   DestinationProgress,
 } from "./world/DestinationCollections.js";
+import {
+  supplyRuns,
+  supplyAction,
+  performSupplyAction,
+} from "./world/SupplyRuns.js";
+import { WorldLighting } from "./systems/WorldLighting.js";
 try {
   const $ = (s) => document.querySelector(s),
     canvas = $("#game"),
@@ -33,7 +40,12 @@ try {
     0.2,
     software ? 650 : 1250,
   );
-  scene.add(new T.HemisphereLight(0xc5e9e8, 0x526c69, software ? 2.0 : 1.45));
+  const hemisphere = new T.HemisphereLight(
+    0xc5e9e8,
+    0x526c69,
+    software ? 2.0 : 1.45,
+  );
+  scene.add(hemisphere);
   if (software) scene.add(new T.AmbientLight(0xd9f0dd, 0.75));
   const sun = new T.DirectionalLight(0xffedc1, software ? 0.55 : 2.0);
   sun.position.set(-90, 150, 90);
@@ -48,6 +60,7 @@ try {
   sun.shadow.normalBias = 0.06;
   scene.add(sun);
   scene.add(sun.target);
+  const lighting = new WorldLighting(scene, sun, hemisphere, software);
   const save = loadSave(),
     world = new World(scene, save, { software }),
     input = new Input(),
@@ -109,7 +122,7 @@ try {
     notify(message);
   }
   function progress() {
-    return `${save.coins.length} / ${world.coins.length} crowns · ${save.visited.length} / 7 areas explored · ${save.secrets.length} / 7 secrets · ${save.broken.length} props smashed · ${scenicRoutes.filter((r) => save.trails[r.id] === r.gates.length).length} / 3 scenic routes · ${save.activities.filter((id) => id.startsWith("stunt:")).length} / 9 stunt rings · ${save.discoveries.length} / 3 destinations · ${save.keepsakes.length} / 9 keepsakes`;
+    return `${save.coins.length} / ${world.coins.length} crowns · ${save.visited.length} / 7 areas explored · ${save.secrets.length} / 7 secrets · ${save.broken.length} props smashed · ${scenicRoutes.filter((r) => save.trails[r.id] === r.gates.length).length} / 3 scenic routes · ${save.activities.filter((id) => id.startsWith("stunt:")).length} / 9 stunt rings · ${save.discoveries.length} / 3 destinations · ${save.keepsakes.length} / 9 keepsakes · ${save.deliveries.length} / 3 beacons restored`;
   }
   function pause(value) {
     paused = value;
@@ -150,7 +163,11 @@ try {
   $("#help").onclick = () => pause(true);
   $("#resume").onclick = () => pause(false);
   $("#close-map").onclick = () => pause(false);
-  function place(spawn, message) {
+  function place(spawn, message, keepCargo = false) {
+    if (save.cargo && !keepCargo) {
+      save.cargo = null;
+      message += " · Supplies returned to depot";
+    }
     state = initialVehicle(spawn, world.heightAt.bind(world));
     scenicProgress.resetPosition();
     stuntProgress.reset();
@@ -166,7 +183,7 @@ try {
     if (message) notify(message);
   }
   $("#reset").onclick = () =>
-    place(world.recover(state.x, state.z), "Back on the nearest road.");
+    place(world.recover(state.x, state.z), "Back on the nearest road.", true);
   $("#sound").onclick = (e) => {
     e.target.textContent = audio.toggle() ? "Sound on" : "Sound off";
   };
@@ -210,11 +227,12 @@ try {
       });
       ctx.stroke();
     }
-    for (const site of discoverySites) {
+    for (const site of [...discoverySites, ...frontierSites]) {
       const [x, z] = point(site.x, site.z);
-      ctx.fillStyle = save.discoveries.includes(site.id)
-        ? "#83d8c7"
-        : "#c9bccf";
+      ctx.fillStyle =
+        save.deliveries.includes(site.id) || save.discoveries.includes(site.id)
+          ? "#83d8c7"
+          : "#c9bccf";
       ctx.fillRect(x - 3, z - 3, 6, 6);
       if (size > 300) {
         ctx.font = "11px system-ui";
@@ -242,6 +260,18 @@ try {
         ctx.textAlign = "center";
         ctx.fillText(d.name, x, z - 12);
       }
+    }
+    for (const run of supplyRuns) {
+      if (save.deliveries.includes(run.id)) continue;
+      const target =
+        save.cargo === run.id ? run.target : !save.cargo ? run.source : null;
+      if (!target) continue;
+      const [x, z] = point(target.x, target.z);
+      ctx.strokeStyle = save.cargo ? "#ffdf89" : "#d7bbf0";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, z, size > 300 ? 7 : 4, 0, Math.PI * 2);
+      ctx.stroke();
     }
     if (player) {
       const [x, z] = point(state.x, state.z);
@@ -305,14 +335,17 @@ try {
     };
     areaList.append(button);
   });
-  for (const site of discoverySites) {
+  for (const site of [...discoverySites, ...frontierSites]) {
     const button = document.createElement("button");
     button.className = "area";
     const title = document.createElement("strong"),
       small = document.createElement("small");
     title.textContent = site.name;
-    small.dataset.collection = site.id;
-    small.textContent = "Drive through the floating keepsakes";
+    if (discoverySites.includes(site)) small.dataset.collection = site.id;
+    else small.dataset.frontier = site.id;
+    small.textContent = discoverySites.includes(site)
+      ? "Drive through the floating keepsakes"
+      : "Outer waters · supply beacon";
     button.append(title, small);
     button.onclick = () => {
       pause(false);
@@ -326,7 +359,19 @@ try {
     if (menu.open) menu.close();
     if (!atlas.open) atlas.showModal();
     drawMap($("#town-map").getContext("2d"), 600);
-    $("#map-progress").textContent = progress();
+    $("#map-progress").textContent =
+      progress() +
+      (save.cargo
+        ? ` · Supplies aboard for ${supplyRuns.find((r) => r.id === save.cargo).name}`
+        : "");
+    for (const run of supplyRuns) {
+      document.querySelector(`[data-frontier="${run.id}"]`).textContent =
+        save.deliveries.includes(run.id)
+          ? "Beacon restored"
+          : save.cargo === run.id
+            ? "Supplies aboard · drive here to deliver"
+            : `Supplies at ${run.source.name}`;
+    }
     for (const c of destinationCollections) {
       const count = c.items.filter((item) =>
         save.keepsakes.includes(item.id),
@@ -335,6 +380,21 @@ try {
         `${c.name} · ${count}/3${count === 3 ? " · Complete" : " · Drive through keepsakes"}`;
     }
   }
+  function interact() {
+    if (paused) return;
+    const action = performSupplyAction(save, state);
+    if (!action) return;
+    persist();
+    audio.tone(action.delivery ? 1200 : 700, 0.25);
+    notify(
+      action.service
+        ? "Boost recharged · ready to explore"
+        : action.delivery
+          ? `${action.label} · Complete`
+          : `Supplies loaded · drive to ${supplyRuns.find((r) => r.id === action.id).name}`,
+    );
+  }
+  $("#interact").onclick = interact;
   $("#map").onclick = showMap;
   $("#minimap").onclick = showMap;
   addEventListener("keydown", (e) => {
@@ -342,6 +402,10 @@ try {
     if (e.code === "Escape") {
       e.preventDefault();
       pause(!paused);
+    }
+    if (e.code === "KeyE") {
+      e.preventDefault();
+      interact();
     }
     if (e.code === "KeyR") $("#reset").click();
     if (e.code === "KeyM") {
@@ -540,8 +604,10 @@ try {
       state.y + 1.8,
       state.z - Math.cos(state.heading) * 5,
     );
-    sun.position.set(state.x - 90, state.y + 150, state.z + 90);
-    sun.target.position.set(state.x, state.y, state.z);
+    lighting.update(state, elapsed, save);
+    const action = supplyAction(save, state);
+    $("#interact").hidden = !action;
+    if (action) $("#interact").textContent = `${action.label} · E / Tap`;
     if (time - lastHud > 0.14) {
       $("#score").textContent = save.coins.length;
       $("#speed-value").textContent = Math.round(Math.abs(state.speed) * 3.6);
@@ -552,11 +618,12 @@ try {
           : world.collected >= 30
             ? "Boost II"
             : "Boost";
-      $("#district").textContent = districts.reduce((a, b) =>
-        Math.hypot(state.x - a.x, state.z - a.z) <
-        Math.hypot(state.x - b.x, state.z - b.z)
-          ? a
-          : b,
+      $("#district").textContent = [...districts, ...frontierSites].reduce(
+        (a, b) =>
+          Math.hypot(state.x - a.x, state.z - a.z) <
+          Math.hypot(state.x - b.x, state.z - b.z)
+            ? a
+            : b,
       ).name;
       drawMap(context, 168);
       lastHud = time;

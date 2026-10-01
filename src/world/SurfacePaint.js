@@ -1,9 +1,10 @@
 import { colorAt, nearestRoad, hash, clamp, lerp } from "./Terrain.js";
-import { landmarks } from "./WorldConfig.js";
+import { landmarks, frontierSites } from "./WorldConfig.js";
 import { livingSites, siteRadius } from "./TownPlan.js";
 import { discoverySites, distanceToDiscoveryPath } from "./DiscoveryPlan.js";
 const approaches = [
   ...landmarks,
+  ...frontierSites,
   ...discoverySites,
   ...livingSites.map((s) => ({ ...s, radius: siteRadius(s) - 2 })),
 ].map((l) => ({ ...l, road: nearestRoad(l.x, l.z, true) }));

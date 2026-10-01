@@ -79,11 +79,18 @@
       <h1>Take the scenic route.</h1>
       <p>
         WASD / arrows · drive<br />Space · drift & brake<br />Shift · boost<br />R
-        · return to nearest road<br />M · town map<br />Escape · pause
+        · return to nearest road<br />E · load / deliver supplies<br />M · town
+        map<br />Escape · pause
       </p>
       <p id="progress"></p>
-      <p>Follow the numbered roadside gates for three scenic routes. Your progress saves at every gate. Explore at your own pace.</p>
-      <p>Jump through a gold stunt ring and land cleanly to earn a badge. Pale side paths lead to three new destinations.</p>
+      <p>
+        Follow the numbered roadside gates for three scenic routes. Your
+        progress saves at every gate. Explore at your own pace.
+      </p>
+      <p>
+        Jump through a gold stunt ring and land cleanly to earn a badge. Pale
+        side paths lead to three new destinations.
+      </p>
       <p id="legacy"></p>
       <button id="resume">Keep exploring</button>
     </dialog>
@@ -104,13 +111,17 @@
         ></canvas>
         <div>
           <p class="map-instruction">
-            Choose an area to start exploring there. Gold squares mark your next scenic-route gates.
+            Choose an area to start exploring there. Gold squares mark your next
+            scenic-route gates. Stop at a supply depot and press E or tap to
+            load a beacon shipment. Drive it to an outer station; map travel
+            returns cargo to its depot.
           </p>
           <div id="area-list"></div>
         </div>
       </div>
       <p id="map-progress"></p>
     </dialog>
+    <button id="interact" hidden></button>
     <nav id="touch" aria-label="Driving controls">
       <div>
         <button data-key="ArrowLeft" aria-label="Steer left">◀</button
