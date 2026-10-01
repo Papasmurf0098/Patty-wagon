@@ -255,6 +255,20 @@ export function districtAt(x, z) {
   }
   return best;
 }
+export function inRampCorridor(x, z, ramp) {
+  const dx = x - ramp.x,
+    dz = z - ramp.z,
+    c = Math.cos(ramp.heading),
+    s = Math.sin(ramp.heading);
+  const lateral = c * dx - s * dz,
+    along = s * dx + c * dz;
+  // Boosted flights off high dunes need a long clear runout, not just a ramp apron.
+  return (
+    Math.abs(lateral) < ramp.width / 2 + 8 &&
+    along < ramp.length / 2 + 30 &&
+    along > -ramp.length / 2 - 230
+  );
+}
 export function spawnFor(id = "conch") {
   const d = districts.find((d) => d.id === id) ?? districts[0];
   const spawns = {

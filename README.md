@@ -51,7 +51,7 @@ See [the current design](docs/DESIGN.md) and [the approved correction plan](docs
 
 ## Validation and limits
 
-Thirty-two automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
+Thirty-nine automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
 
 The deployed game was visually reviewed in SVG compatibility mode across all seven areas. The town map's area controls and the seven-area exploration milestone were also checked. Desktop WebGL rendering and real-phone performance are not yet measured. SVG mode is a compatibility view and has less scenery, no shadows or particle effects, and a lower render frequency. It is not a benchmark for WebGL quality. General seafloor collision follows terrain and ramps; caves are drive-through arches rather than a volumetric cave system, traffic is kinematic, and breakage uses particles rather than rigid-body fragments.
 
@@ -83,3 +83,15 @@ Three optional scenic drives provide eighteen numbered roadside gates: Neighborh
 Continuous swept chassis collision prevents tunneling through thin posts, resolves overlapping spawns, and preserves tangent movement when scraping walls. Lower lateral grip creates greater drift slip while the existing 38/58-unit-per-second normal/boost limits and floatier jumps remain. Streamed rocks now have spatial collision entries, removed on replacement and disposal; rock placement avoids blocking crowns. Traffic boats have moving collision bounds and remain kinematic.
 
 Thirty-two checks pass, including thin-wall sweeps, inside corners, drift slip, ordered scenic progression, teleport rejection, save restoration, open road lanes, boardwalk surface continuity, moving traffic colliders, and rock collision cleanup. Production bundling passes. Real-phone WebGL performance remains unmeasured.
+
+## Side destinations and stunt release — October 1, 2026
+
+Three new destinations develop open sand beyond the existing town: Tidepool Gardens, Anchor Salvage Yard, and Old Shell Sanctuary. Approximately 551 meters of terrain-following side paths connect them to the main roads. Compacted surfaces, sparse shoulder posts, map lines, and direct map travel make them accessible. Tidepools include shell details and benches; the yard includes anchors, crates, winch equipment, stacked beams, and an open ribbed salvage hull; the sanctuary includes broken fluted columns, a drive-through arch, and a tiled courtyard. Models use shared textured materials and merged static geometry.
+
+Nine airborne stunt rings add optional ramp challenges. Pass through a ring in the forward direction and land cleanly after traveling at least 25 meters to earn its badge. Best successful jump distances and destination discoveries save in the existing browser save. Collisions or recovery cancel the attempt; missed rings carry no penalty or deadline. All nine challenges pass normal and boosted driving simulations with streamed rock collision present. Extended ramp approaches and landing corridors reserve scenery space.
+
+Twelve additional residents walk along promenade shoulders between destinations. Their paths follow the terrain, avoid main driving lanes, and check solid props. Existing crown identities and the 612-crown total remain intact. The map adds destination markers, side paths, and completion-colored stunt rings; these details stay in the map and pause menu rather than expanding the persistent HUD.
+
+All 39 automated checks and the production build pass. The additional checks cover vehicle-clear side paths, all nine stunt flights at two speeds with streamed scenery, ring direction and height, interrupted attempts, saves, landing-corridor exclusions, and resident paths.
+
+[Geometry layout preview](docs/previews/discovery-areas.jpg): generated from the new models using Three.js SVG projection. This review excludes normal maps, water-light shaders, cast shadows, and sign lettering; it is not a screenshot of final WebGL appearance. Real-phone WebGL frame times remain unmeasured.

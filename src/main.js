@@ -15,6 +15,8 @@ import { Audio } from "./systems/Audio.js";
 import { loadSave, writeSave } from "./core/SaveManager.js";
 import { initialVehicle, stepVehicle } from "./vehicle/VehiclePhysics.js";
 import { scenicRoutes, ScenicProgress } from "./world/ScenicRoutes.js";
+import { discoverySites, discoveryPaths } from "./world/DiscoveryPlan.js";
+import { stuntTargets, StuntProgress } from "./world/StuntProgress.js";
 try {
   const $ = (s) => document.querySelector(s),
     canvas = $("#game"),
@@ -48,6 +50,7 @@ try {
     audio = new Audio(),
     car = makeWagon();
   const scenicProgress = new ScenicProgress(save);
+  const stuntProgress = new StuntProgress(save);
   scene.add(car);
   if (software)
     car.traverse((node) => {
@@ -101,7 +104,7 @@ try {
     notify(message);
   }
   function progress() {
-    return `${save.coins.length} / ${world.coins.length} crowns · ${save.visited.length} / 7 areas explored · ${save.secrets.length} / 7 secrets · ${save.broken.length} props smashed · ${scenicRoutes.filter(r => save.trails[r.id] === r.gates.length).length} / 3 scenic routes`;
+    return `${save.coins.length} / ${world.coins.length} crowns · ${save.visited.length} / 7 areas explored · ${save.secrets.length} / 7 secrets · ${save.broken.length} props smashed · ${scenicRoutes.filter((r) => save.trails[r.id] === r.gates.length).length} / 3 scenic routes · ${save.activities.filter((id) => id.startsWith("stunt:")).length} / 9 stunt rings · ${save.discoveries.length} / 3 destinations`;
   }
   function pause(value) {
     paused = value;
@@ -145,6 +148,7 @@ try {
   function place(spawn, message) {
     state = initialVehicle(spawn, world.heightAt.bind(world));
     scenicProgress.resetPosition();
+    stuntProgress.reset();
     jumpStart = null;
     camera.position.set(
       state.x + Math.sin(state.heading) * 18,
@@ -190,6 +194,37 @@ try {
       });
       ctx.stroke();
     }
+    ctx.strokeStyle = "#c4c393";
+    ctx.lineWidth = size > 300 ? 2 : 1;
+    for (const path of discoveryPaths) {
+      ctx.beginPath();
+      path.nodes.forEach((p, i) => {
+        const [x, z] = point(p.x, p.z);
+        i ? ctx.lineTo(x, z) : ctx.moveTo(x, z);
+      });
+      ctx.stroke();
+    }
+    for (const site of discoverySites) {
+      const [x, z] = point(site.x, site.z);
+      ctx.fillStyle = save.discoveries.includes(site.id)
+        ? "#83d8c7"
+        : "#c9bccf";
+      ctx.fillRect(x - 3, z - 3, 6, 6);
+      if (size > 300) {
+        ctx.font = "11px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText(site.name, x, z - 9);
+      }
+    }
+    for (const target of stuntTargets) {
+      const [x, z] = point(target.x, target.z);
+      ctx.strokeStyle = save.activities.includes(`stunt:${target.id}`)
+        ? "#89d2b3"
+        : "#f4c477";
+      ctx.beginPath();
+      ctx.arc(x, z, size > 300 ? 3 : 1.6, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     for (const d of districts) {
       const [x, z] = point(d.x, d.z);
       ctx.fillStyle = save.visited.includes(d.id) ? "#ffd56d" : "#d9e9d8";
@@ -220,15 +255,22 @@ try {
       ctx.stroke();
       ctx.restore();
     }
-    for(const route of scenicRoutes) {
-      const gate=route.gates[save.trails[route.id] ?? 0];
-      if(!gate) continue;
-      const [x,z]=point(gate.x,gate.z);
-      ctx.strokeStyle="#ffe292"; ctx.lineWidth=size>300?2:1;
-      ctx.strokeRect(x-3,z-3,6,6);
-      if(size>300) {
-        ctx.fillStyle="#fff1c5"; ctx.font="11px system-ui"; ctx.textAlign="center";
-        ctx.fillText(`${route.name} ${(save.trails[route.id] ?? 0)+1}/6`,x,z+17);
+    for (const route of scenicRoutes) {
+      const gate = route.gates[save.trails[route.id] ?? 0];
+      if (!gate) continue;
+      const [x, z] = point(gate.x, gate.z);
+      ctx.strokeStyle = "#ffe292";
+      ctx.lineWidth = size > 300 ? 2 : 1;
+      ctx.strokeRect(x - 3, z - 3, 6, 6);
+      if (size > 300) {
+        ctx.fillStyle = "#fff1c5";
+        ctx.font = "11px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText(
+          `${route.name} ${(save.trails[route.id] ?? 0) + 1}/6`,
+          x,
+          z + 17,
+        );
       }
     }
   }
@@ -257,6 +299,20 @@ try {
     };
     areaList.append(button);
   });
+  for (const site of discoverySites) {
+    const button = document.createElement("button");
+    button.className = "area";
+    const title = document.createElement("strong"),
+      small = document.createElement("small");
+    title.textContent = site.name;
+    small.textContent = "Side path & open exploration";
+    button.append(title, small);
+    button.onclick = () => {
+      pause(false);
+      place({ x: site.x, z: site.z - 20, heading: Math.PI }, site.name);
+    };
+    areaList.append(button);
+  }
   function showMap() {
     input.clear();
     paused = true;
@@ -296,7 +352,8 @@ try {
       pause(true);
       const node = $("#error");
       node.hidden = false;
-      node.textContent = "Graphics paused. Waiting for the browser to restore the game…";
+      node.textContent =
+        "Graphics paused. Waiting for the browser to restore the game…";
     });
     canvas.addEventListener("webglcontextrestored", () => {
       $("#error").hidden = true;
@@ -339,6 +396,13 @@ try {
     const steps = Math.max(1, Math.ceil(elapsed / (1 / 60)));
     for (let i = 0; i < steps; i++) {
       const result = stepVehicle(state, controls, elapsed / steps, world);
+      stuntProgress.step(state, result, (target, distance, first) => {
+        persist();
+        audio.tone(first ? 1200 : 900, 0.22);
+        notify(
+          `${first ? "Stunt badge" : "New stunt best"} · ${target.id.replaceAll("-", " ")} · ${Math.round(distance)} m`,
+        );
+      });
       if (result.launched && !jumpStart) jumpStart = { x: state.x, z: state.z };
       if (result.landed && jumpStart) {
         const distance = Math.hypot(
@@ -369,10 +433,25 @@ try {
         persist();
       },
     );
-    scenicProgress.update(state,(route,count,finished)=> {
-      persist(); audio.tone(finished ? 1100 : 780,0.15);
-      notify(finished ? `${route.name} complete` : `${route.name} · ${count}/6 gates`);
+    scenicProgress.update(state, (route, count, finished) => {
+      persist();
+      audio.tone(finished ? 1100 : 780, 0.15);
+      notify(
+        finished
+          ? `${route.name} complete`
+          : `${route.name} · ${count}/6 gates`,
+      );
     });
+    for (const site of discoverySites)
+      if (
+        Math.hypot(state.x - site.x, state.z - site.z) < 25 &&
+        !save.discoveries.includes(site.id)
+      ) {
+        save.discoveries.push(site.id);
+        persist();
+        audio.tone(1050, 0.2);
+        notify(`Discovered · ${site.name}`);
+      }
     for (const d of districts)
       if (
         Math.hypot(state.x - d.x, state.z - d.z) < 155 &&
@@ -503,8 +582,10 @@ try {
         drawCalls: renderer.info.render.calls ?? renderer.info.render.faces,
         fps: stats.fps,
         bestJump,
-        districtDetails:world.districtObjects.length,
-        scenicGates:world.scenicGates.length,
+        districtDetails: world.districtObjects.length,
+        scenicGates: world.scenicGates.length,
+        destinations: world.discoveryObjects.length,
+        stuntRings: world.stuntRings.length,
       };
     },
   };
