@@ -17,6 +17,10 @@ import { initialVehicle, stepVehicle } from "./vehicle/VehiclePhysics.js";
 import { scenicRoutes, ScenicProgress } from "./world/ScenicRoutes.js";
 import { discoverySites, discoveryPaths } from "./world/DiscoveryPlan.js";
 import { stuntTargets, StuntProgress } from "./world/StuntProgress.js";
+import {
+  destinationCollections,
+  DestinationProgress,
+} from "./world/DestinationCollections.js";
 try {
   const $ = (s) => document.querySelector(s),
     canvas = $("#game"),
@@ -51,6 +55,7 @@ try {
     car = makeWagon();
   const scenicProgress = new ScenicProgress(save);
   const stuntProgress = new StuntProgress(save);
+  const destinationProgress = new DestinationProgress(save);
   scene.add(car);
   if (software)
     car.traverse((node) => {
@@ -104,7 +109,7 @@ try {
     notify(message);
   }
   function progress() {
-    return `${save.coins.length} / ${world.coins.length} crowns · ${save.visited.length} / 7 areas explored · ${save.secrets.length} / 7 secrets · ${save.broken.length} props smashed · ${scenicRoutes.filter((r) => save.trails[r.id] === r.gates.length).length} / 3 scenic routes · ${save.activities.filter((id) => id.startsWith("stunt:")).length} / 9 stunt rings · ${save.discoveries.length} / 3 destinations`;
+    return `${save.coins.length} / ${world.coins.length} crowns · ${save.visited.length} / 7 areas explored · ${save.secrets.length} / 7 secrets · ${save.broken.length} props smashed · ${scenicRoutes.filter((r) => save.trails[r.id] === r.gates.length).length} / 3 scenic routes · ${save.activities.filter((id) => id.startsWith("stunt:")).length} / 9 stunt rings · ${save.discoveries.length} / 3 destinations · ${save.keepsakes.length} / 9 keepsakes`;
   }
   function pause(value) {
     paused = value;
@@ -149,6 +154,7 @@ try {
     state = initialVehicle(spawn, world.heightAt.bind(world));
     scenicProgress.resetPosition();
     stuntProgress.reset();
+    destinationProgress.reset();
     jumpStart = null;
     camera.position.set(
       state.x + Math.sin(state.heading) * 18,
@@ -305,7 +311,8 @@ try {
     const title = document.createElement("strong"),
       small = document.createElement("small");
     title.textContent = site.name;
-    small.textContent = "Side path & open exploration";
+    small.dataset.collection = site.id;
+    small.textContent = "Drive through the floating keepsakes";
     button.append(title, small);
     button.onclick = () => {
       pause(false);
@@ -320,6 +327,13 @@ try {
     if (!atlas.open) atlas.showModal();
     drawMap($("#town-map").getContext("2d"), 600);
     $("#map-progress").textContent = progress();
+    for (const c of destinationCollections) {
+      const count = c.items.filter((item) =>
+        save.keepsakes.includes(item.id),
+      ).length;
+      document.querySelector(`[data-collection="${c.id}"]`).textContent =
+        `${c.name} · ${count}/3${count === 3 ? " · Complete" : " · Drive through keepsakes"}`;
+    }
   }
   $("#map").onclick = showMap;
   $("#minimap").onclick = showMap;
@@ -396,6 +410,15 @@ try {
     const steps = Math.max(1, Math.ceil(elapsed / (1 / 60)));
     for (let i = 0; i < steps; i++) {
       const result = stepVehicle(state, controls, elapsed / steps, world);
+      destinationProgress.step(state, (collection, count, finished) => {
+        persist();
+        audio.tone(finished ? 1250 : 850, 0.18);
+        notify(
+          finished
+            ? `${collection.name} · collection complete`
+            : `${collection.item} found · ${count}/3`,
+        );
+      });
       stuntProgress.step(state, result, (target, distance, first) => {
         persist();
         audio.tone(first ? 1200 : 900, 0.22);

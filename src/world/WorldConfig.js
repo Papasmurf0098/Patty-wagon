@@ -159,7 +159,7 @@ export const ramps = [
     width: 16,
     length: 25,
     height: 5,
-    heading: 0,
+    heading: 0.15,
   },
   {
     id: "fields-leap",

@@ -64,46 +64,49 @@ test("three side destinations have clear vehicle approaches and preserve all cro
   w.dispose();
 });
 
-test("all nine rings can be reached and cleanly landed with normal or boosted driving", () => {
+test("all nine rings can be reached and cleanly landed with normal or boosted driving at every upgrade tier", () => {
   const w = world();
-  for (const boost of [false, true])
-    for (const r of w.ramps) {
-      const offset = r.length / 2 + 18,
-        spawn = {
-          x: r.x + Math.sin(r.heading) * offset,
-          z: r.z + Math.cos(r.heading) * offset,
-          heading: r.heading,
-        };
-      const s = initialVehicle(spawn, w.heightAt.bind(w)),
-        save = loadSave({ getItem: () => null }),
-        tracker = new StuntProgress(save);
-      const speed = boost ? 52 : 38;
-      Object.assign(s, {
-        speed,
-        vx: -Math.sin(r.heading) * speed,
-        vz: -Math.cos(r.heading) * speed,
-      });
-      w.ensureAround(s.x, s.z, s.heading, true);
-      for (let i = 0; i < 30; i++) w.stream();
-      let badges = 0;
-      for (let i = 0; i < 480; i++) {
-        const result = stepVehicle(
-          s,
-          { throttle: 1, steer: 0, brake: false, boost },
-          1 / 60,
-          w,
+  for (const crowns of [0, 30, 80])
+    for (const boost of [false, true])
+      for (const r of w.ramps) {
+        w.collected = crowns;
+        const offset = r.length / 2 + 18,
+          spawn = {
+            x: r.x + Math.sin(r.heading) * offset,
+            z: r.z + Math.cos(r.heading) * offset,
+            heading: r.heading,
+          };
+        const s = initialVehicle(spawn, w.heightAt.bind(w)),
+          save = loadSave({ getItem: () => null }),
+          tracker = new StuntProgress(save);
+        const speed =
+          (boost ? 58 : 38) + (crowns >= 80 ? 8 : crowns >= 30 ? 4 : 0);
+        Object.assign(s, {
+          speed,
+          vx: -Math.sin(r.heading) * speed,
+          vz: -Math.cos(r.heading) * speed,
+        });
+        w.ensureAround(s.x, s.z, s.heading, true);
+        for (let i = 0; i < 30; i++) w.stream();
+        let badges = 0;
+        for (let i = 0; i < 480; i++) {
+          const result = stepVehicle(
+            s,
+            { throttle: 1, steer: 0, brake: false, boost },
+            1 / 60,
+            w,
+          );
+          tracker.step(s, result, () => badges++);
+          w.ensureAround(s.x, s.z, s.heading);
+          w.stream();
+        }
+        assert.ok(
+          save.activities.includes(`stunt:${r.id}`),
+          `${r.id} boost=${boost} crowns=${crowns}`,
         );
-        tracker.step(s, result, () => badges++);
-        w.ensureAround(s.x, s.z, s.heading);
-        w.stream();
+        assert.equal(badges, 1);
+        assert.ok(save.bestStunts[r.id] >= 25);
       }
-      assert.ok(
-        save.activities.includes(`stunt:${r.id}`),
-        `${r.id} boost=${boost}`,
-      );
-      assert.equal(badges, 1);
-      assert.ok(save.bestStunts[r.id] >= 25);
-    }
   w.dispose();
 });
 

@@ -59,6 +59,8 @@ import {
 } from "./DiscoveryPlan.js";
 import { makeDiscoverySite } from "../art/DiscoveryAssets.js";
 import { stuntTargets } from "./StuntProgress.js";
+import { destinationCollections } from "./DestinationCollections.js";
+import { makeDestinationToken } from "../art/DestinationTokens.js";
 const dummy = new T.Object3D();
 const contactMaterial = new T.MeshBasicMaterial({
   color: 0x23444a,
@@ -89,6 +91,7 @@ export class World {
     this.scenicGates = [];
     this.platforms = [];
     this.discoveryObjects = [];
+    this.destinationTokens = [];
     this.stuntRings = [];
     this.collected = save.coins.length + (save.legacy?.coins ?? 0);
     this.collectedIds = new Set(save.coins);
@@ -567,6 +570,14 @@ export class World {
       });
   }
   makeDiscoveries() {
+    for (const collection of destinationCollections)
+      for (const item of collection.items) {
+        const group = makeDestinationToken(collection.kind, collection.color);
+        group.position.set(item.x, item.y + 2.5, item.z);
+        group.visible = !this.save.keepsakes.includes(item.id);
+        this.scene.add(group);
+        this.destinationTokens.push({ ...item, group });
+      }
     for (const site of discoverySites) {
       const { group, solids } = makeDiscoverySite(site);
       this.scene.add(group);
@@ -1258,6 +1269,16 @@ export class World {
   }
   update(time, dt, vehicle, onCollect, onSmash) {
     updateVisualTime(time);
+    for (const token of this.destinationTokens) {
+      token.group.visible =
+        !this.save.keepsakes.includes(token.id) &&
+        Math.hypot(token.x - vehicle.x, token.z - vehicle.z) < 300;
+      if (token.group.visible) {
+        token.group.rotation.y = time * 0.8;
+        token.group.position.y =
+          token.y + 2.5 + Math.sin(time * 2 + token.z) * 0.25;
+      }
+    }
     for (const target of this.stuntRings) {
       const done = this.save.activities.includes(`stunt:${target.id}`);
       target.color.color.setHex(done ? 0x89d2b3 : 0xffd47a);

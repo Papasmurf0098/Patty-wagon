@@ -9,11 +9,13 @@ PR #3 includes the district, collision, scenic-route, destination, and stunt pas
 - Seven district structures and eighteen ordered scenic gates.
 - Three side destinations connected by approximately 551 meters of terrain-following paths.
 - Tidepools, salvage equipment and a ribbed hull, fluted sanctuary ruins and mosaic courtyard.
+- Nine destination keepsakes with three completion badges, partial save restoration, animated clam/cog/shell models, and map counts.
+- Conch Hop angles clear of the pineapple at upgraded boost speeds; scenic recovery/reload positions cannot award gates.
 - Nine forward airborne ring challenges with clean-landing badges and personal bests.
 - Twelve promenade residents with terrain following, lane avoidance, and prop checks.
 - Swept wall sliding, greater drift slip, streamed-rock collision, and moving traffic bounds.
 - Existing 612 crown identities preserved, open vehicle approaches, and extended clear ramp runouts.
-- 39 automated checks pass, including all nine stunts at normal and boosted speeds with streamed rock collision. Production bundling passes.
+- 43 automated checks pass, including all nine stunts at normal and boosted speeds across all three upgrade tiers with streamed rock collision. Production bundling passes.
 
 ## Visual review
 
@@ -23,7 +25,7 @@ The three models were projected through Three.js SVGRenderer for geometry review
 
 1. Measure real-device WebGL performance across all seven districts and the three side destinations. Verify map scrolling on a phone with ten destination controls.
 2. Improve path behavior around props at promenade endpoints; pedestrians currently pause at obstructed positions rather than using full pathfinding.
-3. Add more authored discoveries and destination-specific interactions while keeping the persistent HUD compact.
+3. Deepen destination interactions beyond the new keepsake collections while keeping the persistent HUD compact. Collections are independent of crown upgrades and have no timers.
 4. Refine traffic contact if needed. Boats remain kinematic, with moving collision bounds rather than rigid-body reactions.
 5. Consider a quality setting based on measured GPU costs; avoid increasing coral density to fill empty space.
 

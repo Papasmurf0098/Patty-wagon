@@ -7,6 +7,7 @@ import {
 } from "../world/WorldConfig.js";
 import { scenicRoutes } from "../world/ScenicRoutes.js";
 import { discoverySites } from "../world/DiscoveryPlan.js";
+import { destinationCollections } from "../world/DestinationCollections.js";
 export const SAVE_KEY = `patty-wagon-underwater-v${WORLD_VERSION}-${WORLD_SEED}`;
 export const LEGACY_KEY = "patty-wagon-free-roam-v1";
 const unique = (value, validate) =>
@@ -23,6 +24,7 @@ function fresh(legacy = null) {
     trails: {},
     bestStunts: {},
     discoveries: [],
+    keepsakes: [],
     visited: [],
     secrets: [],
     position: null,
@@ -69,6 +71,13 @@ export function loadSave(storage) {
           ? Math.max(0, Math.min(route.gates.length, n))
           : 0;
     }
+    out.keepsakes = unique(raw.keepsakes, (v) =>
+      destinationCollections.some((c) => c.items.some((p) => p.id === v)),
+    );
+    // Completion is derived from validated items, so partial collections cannot grant badges.
+    for (const c of destinationCollections)
+      if (c.items.every((p) => out.keepsakes.includes(p.id)))
+        out.activities.push(`collection:${c.id}`);
     out.discoveries = unique(raw.discoveries, (v) =>
       discoverySites.some((s) => s.id === v),
     );
