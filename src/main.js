@@ -14,6 +14,7 @@ import { Input } from "./systems/Input.js";
 import { Audio } from "./systems/Audio.js";
 import { loadSave, writeSave } from "./core/SaveManager.js";
 import { initialVehicle, stepVehicle } from "./vehicle/VehiclePhysics.js";
+import { scenicRoutes, ScenicProgress } from "./world/ScenicRoutes.js";
 try {
   const $ = (s) => document.querySelector(s),
     canvas = $("#game"),
@@ -46,6 +47,7 @@ try {
     input = new Input(),
     audio = new Audio(),
     car = makeWagon();
+  const scenicProgress = new ScenicProgress(save);
   scene.add(car);
   if (software)
     car.traverse((node) => {
@@ -99,7 +101,7 @@ try {
     notify(message);
   }
   function progress() {
-    return `${save.coins.length} / ${world.coins.length} crowns · ${save.visited.length} / 7 areas explored · ${save.secrets.length} / 7 secrets · ${save.broken.length} props smashed`;
+    return `${save.coins.length} / ${world.coins.length} crowns · ${save.visited.length} / 7 areas explored · ${save.secrets.length} / 7 secrets · ${save.broken.length} props smashed · ${scenicRoutes.filter(r => save.trails[r.id] === r.gates.length).length} / 3 scenic routes`;
   }
   function pause(value) {
     paused = value;
@@ -142,6 +144,7 @@ try {
   $("#close-map").onclick = () => pause(false);
   function place(spawn, message) {
     state = initialVehicle(spawn, world.heightAt.bind(world));
+    scenicProgress.resetPosition();
     jumpStart = null;
     camera.position.set(
       state.x + Math.sin(state.heading) * 18,
@@ -216,6 +219,17 @@ try {
       ctx.fill();
       ctx.stroke();
       ctx.restore();
+    }
+    for(const route of scenicRoutes) {
+      const gate=route.gates[save.trails[route.id] ?? 0];
+      if(!gate) continue;
+      const [x,z]=point(gate.x,gate.z);
+      ctx.strokeStyle="#ffe292"; ctx.lineWidth=size>300?2:1;
+      ctx.strokeRect(x-3,z-3,6,6);
+      if(size>300) {
+        ctx.fillStyle="#fff1c5"; ctx.font="11px system-ui"; ctx.textAlign="center";
+        ctx.fillText(`${route.name} ${(save.trails[route.id] ?? 0)+1}/6`,x,z+17);
+      }
     }
   }
   const descriptions = [
@@ -355,6 +369,10 @@ try {
         persist();
       },
     );
+    scenicProgress.update(state,(route,count,finished)=> {
+      persist(); audio.tone(finished ? 1100 : 780,0.15);
+      notify(finished ? `${route.name} complete` : `${route.name} · ${count}/6 gates`);
+    });
     for (const d of districts)
       if (
         Math.hypot(state.x - d.x, state.z - d.z) < 155 &&
@@ -485,6 +503,8 @@ try {
         drawCalls: renderer.info.render.calls ?? renderer.info.render.faces,
         fps: stats.fps,
         bestJump,
+        districtDetails:world.districtObjects.length,
+        scenicGates:world.scenicGates.length,
       };
     },
   };

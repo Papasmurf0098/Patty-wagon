@@ -4,6 +4,7 @@ import {
   districts,
   secrets,
 } from "../world/WorldConfig.js";
+import { scenicRoutes } from "../world/ScenicRoutes.js";
 export const SAVE_KEY = `patty-wagon-underwater-v${WORLD_VERSION}-${WORLD_SEED}`;
 export const LEGACY_KEY = "patty-wagon-free-roam-v1";
 const unique = (value, validate) =>
@@ -17,6 +18,7 @@ function fresh(legacy = null) {
     coins: [],
     broken: [],
     activities: [],
+    trails: {},
     visited: [],
     secrets: [],
     position: null,
@@ -47,8 +49,13 @@ export function loadSave(storage) {
     out.coins = unique(raw.coins, id("crown"));
     out.broken = unique(raw.broken, id("prop"));
     out.activities = unique(raw.activities, (v) =>
-      ["jump", "smash", "explorer"].includes(v),
+      ["jump", "smash", "explorer", ...scenicRoutes.map(r => `trail:${r.id}`)].includes(v),
     );
+    for (const route of scenicRoutes) {
+      const n = raw.trails?.[route.id];
+      out.trails[route.id] = out.activities.includes(`trail:${route.id}`) ? route.gates.length :
+        Number.isInteger(n) ? Math.max(0,Math.min(route.gates.length,n)) : 0;
+    }
     out.visited = unique(raw.visited, (v) => districts.some((d) => d.id === v));
     out.secrets = unique(raw.secrets, (v) => secrets.some((s) => s.id === v));
     if (

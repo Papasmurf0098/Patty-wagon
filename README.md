@@ -51,7 +51,7 @@ See [the current design](docs/DESIGN.md) and [the approved correction plan](docs
 
 ## Validation and limits
 
-Twenty-three automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
+Thirty-two automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
 
 The deployed game was visually reviewed in SVG compatibility mode across all seven areas. The town map's area controls and the seven-area exploration milestone were also checked. Desktop WebGL rendering and real-phone performance are not yet measured. SVG mode is a compatibility view and has less scenery, no shadows or particle effects, and a lower render frequency. It is not a benchmark for WebGL quality. General seafloor collision follows terrain and ramps; caves are drive-through arches rather than a volumetric cave system, traffic is kinematic, and breakage uses particles rather than rigid-body fragments.
 
@@ -73,3 +73,13 @@ Fourteen authored activity pockets furnish all seven districts: neighborhood lau
 Jump gravity is 18 units/s², down from 24; launch impulse is scaled to 90% to give additional hang time with a controlled height increase. A 6m/11m-per-second reference flight lasts roughly 1.6 seconds and returns a single landing event. All 23 automated checks pass. The modified asset and terrain shaders compile and link with the installed Three.js shader generator on Mesa llvmpipe. The production build passes; real-device GPU frame rates remain unmeasured.
 
 See [the rendering research and implementation choices](docs/VISUAL_TECHNIQUES.md).
+
+## Scenic routes and collision release — October 1, 2026
+
+Seven additional district structures add distinct silhouettes and everyday uses: Conch Street water tower, Jellyfish Fields observation hut, Restaurant Commons billboard, lagoon boardwalk, Wreck Cove beacon, Sand Mountain quarry crane, and Neptune Terrace fountain. Shared wood, stone, fabric, and metal materials keep the existing texture detail; static geometry is merged by material. Foundations and piers support the structures. The boardwalk has terrain-connected approaches and a matching driving surface. Scenery reserves these footprints.
+
+Three optional scenic drives provide eighteen numbered roadside gates: Neighborhood Cruise, Lagoon Promenade, and Mountain Descent. Follow each route in order at your own pace. Gate progress persists across reloads in the existing save, and the next gate appears as a gold square on the maps. All 612 crown identities remain available.
+
+Continuous swept chassis collision prevents tunneling through thin posts, resolves overlapping spawns, and preserves tangent movement when scraping walls. Lower lateral grip creates greater drift slip while the existing 38/58-unit-per-second normal/boost limits and floatier jumps remain. Streamed rocks now have spatial collision entries, removed on replacement and disposal; rock placement avoids blocking crowns. Traffic boats have moving collision bounds and remain kinematic.
+
+Thirty-two checks pass, including thin-wall sweeps, inside corners, drift slip, ordered scenic progression, teleport rejection, save restoration, open road lanes, boardwalk surface continuity, moving traffic colliders, and rock collision cleanup. Production bundling passes. Real-phone WebGL performance remains unmeasured.
