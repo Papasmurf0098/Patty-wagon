@@ -360,3 +360,30 @@ export function spawnFor(id = "conch") {
   const [x, z, heading] = spawns[d.id];
   return { x, z, heading };
 }
+
+export const driftPads = [
+  {
+    id: "harbor-slide",
+    name: "Harbor Drift Yard",
+    x: 905,
+    z: 600,
+    radius: 43,
+    color: 0xffd392,
+  },
+  {
+    id: "relay-slide",
+    name: "Relay Skid Basin",
+    x: 965,
+    z: -525,
+    radius: 43,
+    color: 0x87d8db,
+  },
+  {
+    id: "camp-slide",
+    name: "Research Slalom Court",
+    x: -920,
+    z: -820,
+    radius: 43,
+    color: 0xc8b4e2,
+  },
+];

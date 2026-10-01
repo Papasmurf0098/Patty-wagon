@@ -1,6 +1,7 @@
 import * as T from "three";
 import {
   WORLD_SIZE,
+  driftPads,
   frontierSites,
   CHUNK_SIZE,
   districts,
@@ -62,6 +63,7 @@ import { makeDiscoverySite } from "../art/DiscoveryAssets.js";
 import { stuntTargets } from "./StuntProgress.js";
 import { destinationCollections } from "./DestinationCollections.js";
 import { makeDestinationToken } from "../art/DestinationTokens.js";
+import { driftPaths } from "./DriftPlan.js";
 import { supplyRuns } from "./SupplyRuns.js";
 import { makeFrontierSite } from "../art/FrontierAssets.js";
 const dummy = new T.Object3D();
@@ -96,6 +98,8 @@ export class World {
     this.discoveryObjects = [];
     this.destinationTokens = [];
     this.frontierObjects = [];
+    this.hornUntil = -1;
+    this.hornOrigin = { x: 0, y: 0, z: 0 };
     this.supplyPads = [];
     this.stuntRings = [];
     this.collected = save.coins.length + (save.legacy?.coins ?? 0);
@@ -142,6 +146,7 @@ export class World {
     this.makeScenicGates();
     this.makeDiscoveries();
     this.makeFrontier();
+    this.makeDriftPads();
     this.makeStuntRings();
     this.makeExploration();
     this.makeResidents();
@@ -574,6 +579,53 @@ export class World {
           z: gate.z,
         });
       });
+  }
+  makeDriftPads() {
+    if (this.software)
+      for (const path of driftPaths) {
+        const track = mesh(this.scene, roadGeometry(path, 4), 0xbdba93);
+        track.castShadow = false;
+        track.renderOrder = -28;
+      }
+    for (const pad of driftPads) {
+      const group = new T.Group();
+      group.position.set(pad.x, 0, pad.z);
+      for (let i = 0; i < 20; i++) {
+        const a = (i * Math.PI) / 10,
+          x = Math.cos(a) * pad.radius,
+          z = Math.sin(a) * pad.radius;
+        const p = new T.Group();
+        p.position.set(x, terrainHeight(pad.x + x, pad.z + z), z);
+        group.add(p);
+        cylinder(p, 0, 0.4, 0, 0.5, 0.8, pad.color);
+      }
+      const y = terrainHeight(pad.x, pad.z + pad.radius);
+      sign(group, pad.name.toUpperCase(), 0, y + 5, pad.radius, 24, "#526c78");
+      mergeStaticAsset(group);
+      this.scene.add(group);
+      this.decor.push(group);
+    }
+    this.hornRipple = ring(this.scene, 0, 0, 0, 1, 0.05, 0xa9f0e0);
+    this.hornRipple.rotation.x = Math.PI / 2;
+    this.hornRipple.material = this.hornRipple.material.clone();
+    this.hornRipple.material.transparent = true;
+    this.hornRipple.material.depthWrite = false;
+    this.hornRipple.visible = false;
+  }
+  honk(vehicle, time) {
+    this.hornUntil = time + 1.2;
+    this.hornOrigin = { x: vehicle.x, y: vehicle.y, z: vehicle.z };
+    let heard = 0;
+    for (const p of [...this.people, ...this.jellies])
+      if (Math.hypot(p.x - vehicle.x, p.z - vehicle.z) < 28) {
+        const dx = p.x - vehicle.x,
+          dz = p.z - vehicle.z,
+          length = Math.hypot(dx, dz) || 1;
+        p.startledUntil = time + 1.2;
+        p.hornAway = { x: dx / length, z: dz / length };
+        heard++;
+      }
+    return heard;
   }
   makeFrontier() {
     for (const run of supplyRuns) {
@@ -1308,6 +1360,17 @@ export class World {
   }
   update(time, dt, vehicle, onCollect, onSmash) {
     updateVisualTime(time);
+    this.hornRipple.visible = time < this.hornUntil;
+    if (this.hornRipple.visible) {
+      const t = 1 - (this.hornUntil - time) / 1.2;
+      this.hornRipple.position.set(
+        this.hornOrigin.x,
+        this.hornOrigin.y + 0.8,
+        this.hornOrigin.z,
+      );
+      this.hornRipple.scale.setScalar(1 + t * 27);
+      this.hornRipple.material.opacity = (1 - t) * 0.65;
+    }
     for (const pad of this.supplyPads)
       pad.group.visible =
         !this.save.deliveries.includes(pad.id) &&
@@ -1496,6 +1559,11 @@ export class World {
         x = p.x;
         z = p.z;
       }
+      if (p.startledUntil > time) {
+        const amount = ((p.startledUntil - time) / 1.2) * 5;
+        x += p.hornAway.x * amount;
+        z += p.hornAway.z * amount;
+      }
       if (
         [...this.nearbySolids(x, z)].some(
           (b) =>
@@ -1531,9 +1599,16 @@ export class World {
         (this.software ? 140 : 270);
       if (j.mesh.visible) {
         j.mesh.position.set(
-          j.x + Math.sin(time * 0.2 + j.phase) * 5,
+          j.x +
+            Math.sin(time * 0.2 + j.phase) * 5 +
+            (j.startledUntil > time
+              ? j.hornAway.x * (j.startledUntil - time) * 5
+              : 0),
           j.y + Math.sin(time + j.phase) * 1.1,
-          j.z,
+          j.z +
+            (j.startledUntil > time
+              ? j.hornAway.z * (j.startledUntil - time) * 5
+              : 0),
         );
         j.mesh.scale.setScalar(1 + Math.sin(time * 2 + j.phase) * 0.045);
       }

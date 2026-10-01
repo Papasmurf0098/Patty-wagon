@@ -51,7 +51,7 @@ See [the current design](docs/DESIGN.md) and [the approved correction plan](docs
 
 ## Validation and limits
 
-Forty-seven automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
+Fifty-three automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
 
 The deployed game was visually reviewed in SVG compatibility mode across all seven areas. The town map's area controls and the seven-area exploration milestone were also checked. Desktop WebGL rendering and real-phone performance are not yet measured. SVG mode is a compatibility view and has less scenery, no shadows or particle effects, and a lower render frequency. It is not a benchmark for WebGL quality. General seafloor collision follows terrain and ramps; caves are drive-through arches rather than a volumetric cave system, traffic is kinematic, and breakage uses particles rather than rigid-body fragments.
 
@@ -113,3 +113,13 @@ Three optional, untimed supply runs start at Tidepool Gardens, Anchor Salvage Ya
 Outer waters gradually shift toward cooler blue fog with reduced direct sunlight and readable ambient fill. Automatic terrain-aimed headlights strengthen outside the town. Restored beacons illuminate their surroundings using at most two nearby point lights, with no additional shadow maps. Software rendering retains brighter ambient lighting and omits these extra lights. The existing moving water-light shader and sun shadows remain.
 
 Validation: 47 tests cover existing gameplay plus frontier streaming, road clearance, cargo rules, recharge service, expanded saves, and lighting transitions. Production bundling passes. New station geometry was reviewed in SVG projection; final WebGL lighting appearance, touchscreen interaction, and real-phone frame times have not been visually verified. The larger bundle still triggers Vite's existing 500 kB advisory.
+
+## Driving activities and navigation — October 1, 2026
+
+H or the touch Horn button sounds the wagon horn when audio is enabled. A visible expanding ripple and brief reactions from nearby residents and jellyfish remain available with sound off. The reaction system reuses one ripple mesh.
+
+Three drift yards add repeatable untimed driving challenges: Harbor Drift Yard, Relay Skid Basin, and Research Slalom Court. Hold Drift while steering, then release to bank a clean grounded slide of at least 12 meters. Collisions, spins, airborne motion, recovery, and teleports cancel the chain. Best distances and badges persist. Authored access paths, compacted surfaces, and colored boundary markers keep the new activities legible, with procedural rock and foliage exclusions.
+
+Guide buttons select driving destinations without teleporting. Both maps highlight a route through the actual road and side-path network; active cargo automatically guides to its delivery station. The map also offers drift-yard guidance, best distances, and a clear-guide control. Guidance replans periodically while driving and is separate from map travel.
+
+Initial placement now preserves cargo loaded from a save. Bent discovery paths no longer have an extra straight painted approach crossing unreserved scenery. See [the missing-feature audit](docs/MISSING_FEATURES.md) for research, implemented choices, and remaining gaps. Automated checks pass; real WebGL and phone appearance remain unverified.

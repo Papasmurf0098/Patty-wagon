@@ -1,9 +1,11 @@
+import { distanceToDriftPath } from "./DriftPlan.js";
 import { surfacePaint } from "./SurfacePaint.js";
 import { livingSites, siteRadius } from "./TownPlan.js";
 import { districtDetails } from "./DistrictDetails.js";
 import { discoverySites, distanceToDiscoveryPath } from "./DiscoveryPlan.js";
 import {
   CHUNK_SIZE,
+  driftPads,
   frontierSites,
   landmarks,
   ramps,
@@ -90,6 +92,10 @@ export function generateChunk(cx, cz, segments = 32) {
         continue;
       const road = nearestRoad(p.x, p.z);
       if (
+        distanceToDriftPath(p.x, p.z) < 14 ||
+        driftPads.some(
+          (s) => Math.hypot(p.x - s.x, p.z - s.z) < s.radius + 8,
+        ) ||
         frontierSites.some(
           (s) => Math.hypot(p.x - s.x, p.z - s.z) < s.radius + 8,
         ) ||

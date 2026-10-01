@@ -5,12 +5,13 @@ import { World } from "./world/World.js";
 import { makeWagon } from "./art/Models.js";
 import {
   districts,
+  driftPads,
   frontierSites,
   secrets,
   spawnFor,
   WORLD_SIZE,
 } from "./world/WorldConfig.js";
-import { roadPaths, terrainHeight } from "./world/Terrain.js";
+import { roadPaths, terrainHeight, nearestRoad } from "./world/Terrain.js";
 import { Input } from "./systems/Input.js";
 import { Audio } from "./systems/Audio.js";
 import { loadSave, writeSave } from "./core/SaveManager.js";
@@ -28,6 +29,9 @@ import {
   performSupplyAction,
 } from "./world/SupplyRuns.js";
 import { WorldLighting } from "./systems/WorldLighting.js";
+import { driftPaths } from "./world/DriftPlan.js";
+import { planRoute } from "./world/Navigation.js";
+import { DriftProgress } from "./world/DriftProgress.js";
 try {
   const $ = (s) => document.querySelector(s),
     canvas = $("#game"),
@@ -67,6 +71,12 @@ try {
     audio = new Audio(),
     car = makeWagon();
   const scenicProgress = new ScenicProgress(save);
+  const driftProgress = new DriftProgress(save);
+  let guidance = null,
+    navRoute = null,
+    lastNavigation = -10,
+    hornHeld = false,
+    lastHorn = -10;
   const stuntProgress = new StuntProgress(save);
   const destinationProgress = new DestinationProgress(save);
   scene.add(car);
@@ -122,7 +132,7 @@ try {
     notify(message);
   }
   function progress() {
-    return `${save.coins.length} / ${world.coins.length} crowns · ${save.visited.length} / 7 areas explored · ${save.secrets.length} / 7 secrets · ${save.broken.length} props smashed · ${scenicRoutes.filter((r) => save.trails[r.id] === r.gates.length).length} / 3 scenic routes · ${save.activities.filter((id) => id.startsWith("stunt:")).length} / 9 stunt rings · ${save.discoveries.length} / 3 destinations · ${save.keepsakes.length} / 9 keepsakes · ${save.deliveries.length} / 3 beacons restored`;
+    return `${save.coins.length} / ${world.coins.length} crowns · ${save.visited.length} / 7 areas explored · ${save.secrets.length} / 7 secrets · ${save.broken.length} props smashed · ${scenicRoutes.filter((r) => save.trails[r.id] === r.gates.length).length} / 3 scenic routes · ${save.activities.filter((id) => id.startsWith("stunt:")).length} / 9 stunt rings · ${save.discoveries.length} / 3 destinations · ${save.keepsakes.length} / 9 keepsakes · ${save.deliveries.length} / 3 beacons restored · ${save.activities.filter((id) => id.startsWith("drift:")).length} / 3 drift badges`;
   }
   function pause(value) {
     paused = value;
@@ -164,6 +174,11 @@ try {
   $("#resume").onclick = () => pause(false);
   $("#close-map").onclick = () => pause(false);
   function place(spawn, message, keepCargo = false) {
+    if (!keepCargo) {
+      guidance = null;
+      navRoute = null;
+    }
+    lastNavigation = -10;
     if (save.cargo && !keepCargo) {
       save.cargo = null;
       message += " · Supplies returned to depot";
@@ -171,6 +186,7 @@ try {
     state = initialVehicle(spawn, world.heightAt.bind(world));
     scenicProgress.resetPosition();
     stuntProgress.reset();
+    driftProgress.reset();
     destinationProgress.reset();
     jumpStart = null;
     camera.position.set(
@@ -219,13 +235,38 @@ try {
     }
     ctx.strokeStyle = "#c4c393";
     ctx.lineWidth = size > 300 ? 2 : 1;
-    for (const path of discoveryPaths) {
+    for (const path of [...discoveryPaths, ...driftPaths]) {
       ctx.beginPath();
       path.nodes.forEach((p, i) => {
         const [x, z] = point(p.x, p.z);
         i ? ctx.lineTo(x, z) : ctx.moveTo(x, z);
       });
       ctx.stroke();
+    }
+    if (navRoute) {
+      ctx.strokeStyle = "#ffe28e";
+      ctx.lineWidth = size > 300 ? 4 : 2;
+      ctx.beginPath();
+      navRoute.points.forEach((p, i) => {
+        const [x, z] = point(p.x, p.z);
+        i ? ctx.lineTo(x, z) : ctx.moveTo(x, z);
+      });
+      ctx.stroke();
+    }
+    for (const pad of driftPads) {
+      const [x, z] = point(pad.x, pad.z);
+      ctx.strokeStyle = save.activities.includes(`drift:${pad.id}`)
+        ? "#89d2b3"
+        : "#edaecd";
+      ctx.beginPath();
+      ctx.arc(x, z, (pad.radius / WORLD_SIZE) * size, 0, Math.PI * 2);
+      ctx.stroke();
+      if (size > 300) {
+        ctx.font = "10px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#efd7eb";
+        ctx.fillText(pad.name, x, z - 13);
+      }
     }
     for (const site of [...discoverySites, ...frontierSites]) {
       const [x, z] = point(site.x, site.z);
@@ -333,7 +374,21 @@ try {
       pause(false);
       place(spawnFor(d.id), d.name);
     };
-    areaList.append(button);
+    const row = document.createElement("div");
+    row.className = "area-row";
+    const guide = document.createElement("button");
+    guide.textContent = "Guide";
+    guide.setAttribute("aria-label", `Guide to ${d.name}`);
+    guide.onclick = () => {
+      const spawn = spawnFor(d.id),
+        road = nearestRoad(spawn.x, spawn.z, true);
+      guidance = { x: road.x, z: road.z, name: d.name };
+      lastNavigation = -10;
+      pause(false);
+      notify(`Guidance · ${d.name}`);
+    };
+    row.append(button, guide);
+    areaList.append(row);
   });
   for (const site of [...discoverySites, ...frontierSites]) {
     const button = document.createElement("button");
@@ -351,14 +406,69 @@ try {
       pause(false);
       place({ x: site.x, z: site.z - 20, heading: Math.PI }, site.name);
     };
+    const row = document.createElement("div");
+    row.className = "area-row";
+    const guide = document.createElement("button");
+    guide.textContent = "Guide";
+    guide.setAttribute("aria-label", `Guide to ${site.name}`);
+    guide.onclick = () => {
+      guidance = { x: site.x, z: site.z, name: site.name };
+      lastNavigation = -10;
+      pause(false);
+      notify(`Guidance · ${site.name}`);
+    };
+    row.append(button, guide);
+    areaList.append(row);
+  }
+  $("#clear-guidance").onclick = () => {
+    guidance = null;
+    navRoute = null;
+    lastNavigation = -10;
+    showMap();
+  };
+  function updateNavigation() {
+    const shipment = supplyRuns.find((r) => r.id === save.cargo);
+    const target = shipment
+      ? { ...shipment.target, name: shipment.name }
+      : guidance;
+    navRoute = target ? planRoute(state, target) : null;
+    if (
+      !shipment &&
+      target &&
+      Math.hypot(state.x - target.x, state.z - target.z) < 15
+    ) {
+      guidance = null;
+      navRoute = null;
+      notify(`Arrived · ${target.name}`);
+    }
+  }
+  for (const pad of driftPads) {
+    const button = document.createElement("button");
+    button.className = "area";
+    button.dataset.drift = pad.id;
+    button.textContent = `Guide to ${pad.name}`;
+    button.onclick = () => {
+      guidance = { x: pad.x, z: pad.z, name: pad.name };
+      lastNavigation = -10;
+      pause(false);
+      notify(`Guidance · ${pad.name}`);
+    };
     areaList.append(button);
   }
   function showMap() {
+    updateNavigation();
     input.clear();
     paused = true;
     if (menu.open) menu.close();
     if (!atlas.open) atlas.showModal();
     drawMap($("#town-map").getContext("2d"), 600);
+    $("#clear-guidance").disabled = !!save.cargo;
+    for (const pad of driftPads)
+      document.querySelector(`[data-drift="${pad.id}"]`).textContent =
+        `Guide to ${pad.name}${save.bestDrifts[pad.id] ? ` · Best ${Math.round(save.bestDrifts[pad.id])} m` : " · Clean slide 12 m"}`;
+    $("#navigation-status").textContent = navRoute
+      ? `${navRoute.target.name} · ${Math.round(navRoute.length + navRoute.approach + navRoute.arrival)} m · follow the gold line`
+      : "Choose Guide to follow a route while driving.";
     $("#map-progress").textContent =
       progress() +
       (save.cargo
@@ -385,6 +495,7 @@ try {
     const action = performSupplyAction(save, state);
     if (!action) return;
     persist();
+    lastNavigation = -10;
     audio.tone(action.delivery ? 1200 : 700, 0.25);
     notify(
       action.service
@@ -446,7 +557,7 @@ try {
   }
   addEventListener("resize", resize);
   resize();
-  place(save.position ?? spawnFor());
+  place(save.position ?? spawnFor(), null, true);
   function frame(now) {
     requestAnimationFrame(frame);
     const elapsed = Math.min((now - last) / 1000, 0.12);
@@ -474,6 +585,13 @@ try {
     const steps = Math.max(1, Math.ceil(elapsed / (1 / 60)));
     for (let i = 0; i < steps; i++) {
       const result = stepVehicle(state, controls, elapsed / steps, world);
+      driftProgress.step(state, controls, result, (pad, distance, first) => {
+        persist();
+        audio.tone(1000, 0.2);
+        notify(
+          `${first ? "Drift badge" : "New drift best"} · ${pad.name} · ${Math.round(distance)} m`,
+        );
+      });
       destinationProgress.step(state, (collection, count, finished) => {
         persist();
         audio.tone(finished ? 1250 : 850, 0.18);
@@ -500,6 +618,17 @@ try {
         if (distance > 35) complete("jump", "Long jump · 35 meters cleared");
         jumpStart = null;
       }
+    }
+    const horn = input.has("KeyH");
+    if (horn && !hornHeld && time - lastHorn > 0.8) {
+      world.honk(state, time);
+      audio.horn();
+      lastHorn = time;
+    }
+    hornHeld = horn;
+    if (time - lastNavigation > 3) {
+      updateNavigation();
+      lastNavigation = time;
     }
     world.update(
       time,
@@ -606,7 +735,12 @@ try {
     );
     lighting.update(state, elapsed, save);
     const action = supplyAction(save, state);
-    $("#interact").hidden = !action;
+    const drift = driftProgress.chain;
+    $("#interact").disabled = !action;
+    $("#interact").hidden = !action && !drift;
+    if (!action && drift)
+      $("#interact").textContent =
+        `Clean drift · ${Math.round(drift.distance)} m · release to bank`;
     if (action) $("#interact").textContent = `${action.label} · E / Tap`;
     if (time - lastHud > 0.14) {
       $("#score").textContent = save.coins.length;

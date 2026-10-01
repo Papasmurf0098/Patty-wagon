@@ -2,11 +2,11 @@
 
 The player drives a hamburger wagon around a broad, connected Bikini Bottom-inspired town. The burger forms the entire vehicle, with seating inside the upper bun and wheels beneath the food body. A bright underwater backdrop, sandy seafloor, marine architecture, coral, kelp, jellyfish, and widely separated landmarks establish the setting.
 
-The world is the main experience. Every area is accessible immediately; activities, crown trails, destruction, jumps, and secrets are optional. There are no timers, mandatory missions, lives, or cutscenes.
+The world is the main experience. Every area is accessible immediately; activities, crown trails, destruction, jumps, secrets, deliveries, and drift activities are optional. There are no timers, mandatory missions, lives, or cutscenes.
 
 ## Town
 
-The map spans 1,800 world units, with seven connected areas: Conch Street, Restaurant Commons, Jellyfish Fields, Goo Lagoon, Wreck Cove, Sand Mountain, and Neptune Terrace. A winding outer loop and six cross-town routes give players multiple approaches. Open sand connects neighborhoods beyond the road network.
+The map spans 2,400 world units, with seven connected areas: Conch Street, Restaurant Commons, Jellyfish Fields, Goo Lagoon, Wreck Cove, Sand Mountain, and Neptune Terrace. A winding outer loop and six cross-town routes give players multiple approaches. Open sand connects neighborhoods beyond the road network.
 
 Major landmarks receive individual models. Secondary homes are placed in small clusters, with clear roads and breathing room. Seeded terrain and minimum-spacing scenery generation add variety between destinations without replacing designed routes and discoveries.
 

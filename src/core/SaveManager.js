@@ -1,5 +1,6 @@
 import {
   WORLD_SEED,
+  driftPads,
   WORLD_SIZE,
   frontierSites,
   WORLD_VERSION,
@@ -25,6 +26,7 @@ function fresh(legacy = null) {
     activities: [],
     trails: {},
     bestStunts: {},
+    bestDrifts: {},
     discoveries: [],
     keepsakes: [],
     deliveries: [],
@@ -68,6 +70,7 @@ export function loadSave(storage) {
     out.broken = unique(raw.broken, id("prop"));
     out.activities = unique(raw.activities, (v) =>
       [
+        ...driftPads.map((p) => `drift:${p.id}`),
         "jump",
         "smash",
         "explorer",
@@ -97,6 +100,11 @@ export function loadSave(storage) {
       const n = raw.bestStunts?.[r.id];
       if (Number.isFinite(n) && n >= 25 && n < 2000)
         out.bestStunts[r.id] = Math.round(n * 10) / 10;
+    }
+    for (const pad of driftPads) {
+      const n = raw.bestDrifts?.[pad.id];
+      if (Number.isFinite(n) && n >= 12 && n < 100000)
+        out.bestDrifts[pad.id] = Math.round(n * 10) / 10;
     }
     out.visited = unique(raw.visited, (v) => districts.some((d) => d.id === v));
     out.secrets = unique(raw.secrets, (v) => secrets.some((s) => s.id === v));

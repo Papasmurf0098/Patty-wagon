@@ -11,6 +11,10 @@ export class Audio {
     }
     return this.enabled;
   }
+  horn() {
+    this.tone(220, 0.25);
+    this.tone(330, 0.25);
+  }
   tone(frequency = 650, duration = 0.12) {
     if (!this.enabled || !this.ctx) return;
     const o = this.ctx.createOscillator(),
