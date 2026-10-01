@@ -39,9 +39,22 @@ import {
   floraGeometries,
   crownGeometry,
 } from "../art/Models.js";
-import { sandTexture, terrainMaterial as makeTerrainMaterial } from "../art/Textures.js";
+import {
+  sandTexture,
+  terrainMaterial as makeTerrainMaterial,
+} from "../art/Textures.js";
 import { prepareSoftwareScene, setInstance } from "../core/Renderer.js";
+import { surfaceMaterial, updateVisualTime } from "../art/Materials.js";
+import { makeTownProp, PROP_SIZES } from "../art/TownAssets.js";
+import { livingSites, siteRadius } from "./TownPlan.js";
 const dummy = new T.Object3D();
+const contactMaterial = new T.MeshBasicMaterial({
+  color: 0x23444a,
+  transparent: true,
+  opacity: 0.1,
+  depthWrite: false,
+  side: T.DoubleSide,
+});
 export class World {
   constructor(scene, save, { software = false, worker = true } = {}) {
     this.scene = scene;
@@ -59,6 +72,7 @@ export class World {
     this.jellies = [];
     this.decor = [];
     this.landmarkObjects = [];
+    this.activitySites = [];
     this.collected = save.coins.length + (save.legacy?.coins ?? 0);
     this.collectedIds = new Set(save.coins);
     this.brokenIds = new Set(save.broken);
@@ -97,6 +111,7 @@ export class World {
     this.makeRoads();
     this.makeLandmarks();
     this.makeStreetDetails();
+    this.makeLivingSites();
     this.makeSetPieces();
     this.makeExploration();
     this.makeResidents();
@@ -224,6 +239,7 @@ export class World {
       this.scene.add(group);
       this.landmarkObjects.push(group);
       this.addSolid(l.x, l.z, w, d, h);
+      this.makeContactShadow(l.x, l.z, w * 0.6, d * 0.6);
     }
     // Small, spaced clusters of marine homes. Road clearances are checked.
     let id = 0;
@@ -248,38 +264,132 @@ export class World {
         this.scene.add(home);
         this.decor.push(home);
         this.addSolid(x, z, 10, 10, 16);
+        this.makeContactShadow(x, z, 6.3, 6.3);
       }
   }
   makeStreetDetails() {
     // Small roadside pockets give inhabited districts a readable human scale.
     // Furniture sits on the shoulder, leaving the entire driving corridor open.
-    for (const d of districts.filter(d => ["conch", "commons", "lagoon", "neptune"].includes(d.id))) {
-      const path = roadPaths.find(p => p.id === (d.id === "conch" ? "conch-commons" :
-        d.id === "lagoon" ? "lagoon-commons" : d.id === "neptune" ? "palace-commons" : "wreck-commons"));
+    for (const d of districts.filter((d) =>
+      ["conch", "commons", "lagoon", "neptune"].includes(d.id),
+    )) {
+      const path = roadPaths.find(
+        (p) =>
+          p.id ===
+          (d.id === "conch"
+            ? "conch-commons"
+            : d.id === "lagoon"
+              ? "lagoon-commons"
+              : d.id === "neptune"
+                ? "palace-commons"
+                : "wreck-commons"),
+      );
       for (let i = 5; i < path.nodes.length - 1; i += 9) {
-        const p = path.nodes[i], next = path.nodes[i + 1];
-        if (Math.hypot(p.x-d.x,p.z-d.z) > 230) continue;
-        const angle = Math.atan2(next.x-p.x,next.z-p.z);
+        const p = path.nodes[i],
+          next = path.nodes[i + 1];
+        if (Math.hypot(p.x - d.x, p.z - d.z) > 230) continue;
+        const angle = Math.atan2(next.x - p.x, next.z - p.z);
         const side = i % 2 ? 1 : -1;
         const x = p.x + Math.cos(angle) * (path.width / 2 + 7) * side;
         const z = p.z - Math.sin(angle) * (path.width / 2 + 7) * side;
-        const road = nearestRoad(x,z);
-        if (road.distance < road.width / 2 + 4 || this.solids.some(s => Math.hypot(x-s.x,z-s.z)<Math.max(s.w,s.d)/2+8)) continue;
+        const road = nearestRoad(x, z);
+        if (
+          road.distance < road.width / 2 + 4 ||
+          this.solids.some(
+            (s) => Math.hypot(x - s.x, z - s.z) < Math.max(s.w, s.d) / 2 + 8,
+          )
+        )
+          continue;
         const group = new T.Group();
-        group.position.set(x,terrainHeight(x,z),z);
+        group.position.set(x, terrainHeight(x, z), z);
         group.rotation.y = angle;
-        cylinder(group,0,3.9,0,0.18,7.8,0x496e70);
-        ring(group,0,7.7,0,0.9,0.10,0x799d97).rotation.x = Math.PI/2;
-        ball(group,0,7.7,0,0.65,0.8,0.65,0xe6d9a3);
+        cylinder(
+          group,
+          0,
+          3.9,
+          0,
+          0.18,
+          7.8,
+          surfaceMaterial("metal", 0x496e70),
+        );
+        ring(group, 0, 7.7, 0, 0.9, 0.1, 0x799d97).rotation.x = Math.PI / 2;
+        ball(group, 0, 7.7, 0, 0.65, 0.8, 0.65, 0xe6d9a3);
         // Slatted bench and its legs, facing the road.
-        for (let j=0;j<4;j++) box(group,2.8,1.1,-0.6+j*0.4,3.4,0.16,0.30,0xa77d50);
-        for (const bx of [1.6,4]) box(group,bx,0.55,0,0.18,1.1,1.5,0x4d7373);
-        for (const by of [1.7,2.1]) box(group,2.8,by,0.8,3.4,0.25,0.16,0xa77d50);
+        for (let j = 0; j < 4; j++)
+          box(
+            group,
+            2.8,
+            1.1,
+            -0.6 + j * 0.4,
+            3.4,
+            0.16,
+            0.3,
+            surfaceMaterial("wood", 0xa77d50),
+          );
+        for (const bx of [1.6, 4])
+          box(group, bx, 0.55, 0, 0.18, 1.1, 1.5, 0x4d7373);
+        for (const by of [1.7, 2.1])
+          box(group, 2.8, by, 0.8, 3.4, 0.25, 0.16, 0xa77d50);
         this.scene.add(group);
         this.decor.push(group);
-        this.addSolid(x,z,0.7,0.7,8);
+        this.addSolid(x, z, 0.7, 0.7, 8);
       }
     }
+  }
+  makeLivingSites() {
+    for (const site of livingSites) {
+      const group = makeTownProp(site.kind, site.label);
+      const [w, d, h] = PROP_SIZES[site.kind],
+        c = Math.cos(site.heading),
+        s = Math.sin(site.heading);
+      // A shallow stone foundation reaches the ground at every corner.
+      const width = Math.abs(c) * w + Math.abs(s) * d,
+        depth = Math.abs(c) * d + Math.abs(s) * w;
+      let base = terrainHeight(site.x, site.z);
+      for (const x of [-width / 2, width / 2])
+        for (const z of [-depth / 2, depth / 2])
+          base = Math.max(base, terrainHeight(site.x + x, site.z + z));
+      const foundation = box(
+        group,
+        0,
+        -1,
+        0,
+        w,
+        2,
+        d,
+        surfaceMaterial("stone", 0xb0b79b),
+      );
+      foundation.receiveShadow = true;
+      group.position.set(site.x, base, site.z);
+      group.rotation.y = site.heading;
+      this.scene.add(group);
+      this.decor.push(group);
+      this.activitySites.push({ ...site, group, base, width, depth });
+      this.addSolid(site.x, site.z, width, depth, h, base).siteId = site.id;
+      this.makeContactShadow(site.x, site.z, width * 0.6, depth * 0.6);
+    }
+  }
+  makeContactShadow(x, z, rx, rz) {
+    const positions = [x, terrainHeight(x, z) + 0.1, z],
+      indices = [];
+    for (let i = 0; i <= 24; i++) {
+      const a = (i / 24) * Math.PI * 2,
+        px = x + Math.cos(a) * rx,
+        pz = z + Math.sin(a) * rz;
+      positions.push(px, terrainHeight(px, pz) + 0.1, pz);
+      if (i) indices.push(0, i + 1, i);
+    }
+    const geometry = new T.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new T.Float32BufferAttribute(positions, 3),
+    );
+    geometry.setIndex(indices);
+    const shadow = mesh(this.scene, geometry, contactMaterial);
+    shadow.castShadow = false;
+    shadow.receiveShadow = false;
+    shadow.renderOrder = -20;
+    return shadow;
   }
   makeSetPieces() {
     for (const r of this.ramps) {
@@ -309,7 +419,11 @@ export class World {
       );
       g.setIndex([0, 2, 1, 1, 2, 3]);
       g.computeVertexNormals();
-      mesh(group, g, 0xc89160, 0, 0.08, 0);
+      g.setAttribute(
+        "uv",
+        new T.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 1, 1], 2),
+      );
+      mesh(group, g, surfaceMaterial("wood", 0xc89160), 0, 0.08, 0);
       for (const x of [-r.width / 2, r.width / 2]) {
         box(
           group,
@@ -433,17 +547,27 @@ export class World {
     }
     for (const d of districts)
       for (let i = 0; i < 14; i++) {
-        const a = (i / 14) * Math.PI * 2,
-          x = d.x + Math.cos(a) * (44 + (i % 3) * 7),
+        const a = (i / 14) * Math.PI * 2;
+        let x = d.x + Math.cos(a) * (44 + (i % 3) * 7),
           z = d.z + Math.sin(a) * (44 + (i % 3) * 7);
         if (
           !this.solids.some(
             (b) =>
+              !b.siteId &&
               Math.abs(x - b.x) < b.w / 2 + 3 &&
               Math.abs(z - b.z) < b.d / 2 + 3,
           )
-        )
+        ) {
+          // Retain discovery IDs as town assets evolve. Shift any overlapping
+          // pickup to the adjacent path instead of deleting saved discoveries.
+          for (const b of this.solids.filter((s) => s.siteId))
+            if (
+              Math.abs(x - b.x) < b.w / 2 + 4 &&
+              Math.abs(z - b.z) < b.d / 2 + 4
+            )
+              x = b.x + (x >= b.x ? 1 : -1) * (b.w / 2 + 5);
           this.addCrown(`crown:${d.id}:${i}`, x, z, terrainHeight(x, z) + 2);
+        }
       }
     for (const s of secrets)
       for (let i = 0; i < 8; i++) {
@@ -528,6 +652,34 @@ export class World {
         this.scene.add(m);
         this.people.push({ mesh: m, x, z, phase: i + d.x * 0.01 });
       }
+    for (const site of this.activitySites) {
+      // Residents gather on paths in front of activity pockets.
+      const c = Math.cos(site.heading),
+        s = Math.sin(site.heading);
+      for (let i = 0; i < 2; i++) {
+        const offset = site.depth / 2 + 7;
+        const x = site.x + c * (-4 + i * 8) + s * offset,
+          z = site.z - s * (-4 + i * 8) + c * offset;
+        if (
+          [...this.nearbySolids(x, z)].some(
+            (b) =>
+              Math.abs(x - b.x) < b.w / 2 + 3 &&
+              Math.abs(z - b.z) < b.d / 2 + 3,
+          )
+        )
+          continue;
+        const m = makeFish([0xc6a7bc, 0x9fb8a5][i]);
+        this.scene.add(m);
+        this.people.push({
+          mesh: m,
+          x,
+          z,
+          phase: site.x * 0.01 + i,
+          heading: site.heading,
+          path: true,
+        });
+      }
+    }
     for (let i = 0; i < 9; i++) {
       const m = makeBoat([0xa495c0, 0xe1af7b, 0x82b5b9][i % 3]);
       this.scene.add(m);
@@ -545,6 +697,10 @@ export class World {
       }
   }
   makeAtmosphere() {
+    this.vehicleShadow = this.makeContactShadow(0, 0, 2.8, 3.2);
+    this.vehicleShadow.geometry.attributes.position.setUsage(
+      T.DynamicDrawUsage,
+    );
     this.bubbles = [];
     const batch = new T.InstancedMesh(
       new T.SphereGeometry(0.13, 5, 3),
@@ -749,10 +905,12 @@ export class World {
       else if (desired && !this.pending.has(key))
         this.queue.push({ key, cx: data.cx, cz: data.cz, segments: desired });
     }
-    this.queue = this.queue.filter((item) =>
-      this.wanted.get(item.key) === item.segments &&
-      this.chunks.get(item.key)?.segments !== item.segments &&
-      !this.pending.has(item.key));
+    this.queue = this.queue.filter(
+      (item) =>
+        this.wanted.get(item.key) === item.segments &&
+        this.chunks.get(item.key)?.segments !== item.segments &&
+        !this.pending.has(item.key),
+    );
     if (this.queue.length && this.pending.size < 3) {
       const item = this.queue.shift();
       if (this.worker) {
@@ -801,6 +959,21 @@ export class World {
     }
   }
   update(time, dt, vehicle, onCollect, onSmash) {
+    updateVisualTime(time);
+    const shadowPosition = this.vehicleShadow.geometry.attributes.position;
+    const clearance = Math.max(
+      0,
+      vehicle.y - terrainHeight(vehicle.x, vehicle.z),
+    );
+    const spread = 1 + Math.min(clearance, 18) * 0.045;
+    for (let i = 0; i < shadowPosition.count; i++) {
+      const a = ((i - 1) / 24) * Math.PI * 2;
+      const x = vehicle.x + (i ? Math.cos(a) * 2.8 * spread : 0),
+        z = vehicle.z + (i ? Math.sin(a) * 3.2 * spread : 0);
+      shadowPosition.setXYZ(i, x, terrainHeight(x, z) + 0.12, z);
+    }
+    shadowPosition.needsUpdate = true;
+    this.vehicleShadow.geometry.computeBoundingSphere();
     this.ensureAround(vehicle.x, vehicle.z, vehicle.heading);
     this.stream();
     for (const c of this.interactionHash.query(vehicle.x, vehicle.z, 5)) {
@@ -889,19 +1062,43 @@ export class World {
         Math.hypot(p.x - vehicle.x, p.z - vehicle.z) <
         (this.software ? 90 : 180);
       if (!p.mesh.visible) continue;
-      const close = Math.hypot(p.x - vehicle.x, p.z - vehicle.z) < 10,
-        x =
+      const close = Math.hypot(p.x - vehicle.x, p.z - vehicle.z) < 10;
+      let x =
           p.x +
           Math.sin(time * 0.4 + p.phase) * 3 +
           (close ? Math.sign(p.x - vehicle.x) * 4 : 0),
         z = p.z + Math.cos(time * 0.3 + p.phase) * 3;
+      if (p.path) {
+        const walk = Math.sin(time * 0.2 + p.phase) * 3.5;
+        x = p.x + Math.cos(p.heading) * walk;
+        z = p.z - Math.sin(p.heading) * walk;
+      }
+      if (
+        [...this.nearbySolids(x, z)].some(
+          (b) =>
+            Math.abs(x - b.x) < b.w / 2 + 1 && Math.abs(z - b.z) < b.d / 2 + 1,
+        )
+      ) {
+        x = p.x;
+        z = p.z;
+      }
       p.mesh.position.set(
         x,
         terrainHeight(x, z) + Math.abs(Math.sin(time * 4 + p.phase)) * 0.06,
         z,
       );
-      p.mesh.rotation.y = p.phase + Math.sin(time * 0.2) * 0.3;
+      p.mesh.rotation.y = p.path
+        ? p.heading +
+          (Math.cos(time * 0.2 + p.phase) > 0 ? -Math.PI / 2 : Math.PI / 2)
+        : p.phase + Math.sin(time * 0.2) * 0.3;
       p.mesh.rotation.z = Math.sin(time * 4 + p.phase) * 0.035;
+      const stride = Math.sin(time * 3.5 + p.phase) * 0.25;
+      p.mesh.userData.legs?.forEach(
+        (leg, i) => (leg.rotation.x = stride * (i ? 1 : -1)),
+      );
+      p.mesh.userData.arms?.forEach(
+        (arm, i) => (arm.rotation.x = stride * (i ? -1 : 1)),
+      );
     }
     for (const j of this.jellies) {
       j.mesh.visible =

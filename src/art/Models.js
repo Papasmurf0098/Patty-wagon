@@ -1,23 +1,25 @@
 import * as T from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { surfaceMaterial } from "./Materials.js";
 const materials = new Map();
 export function mat(color, basic = false, opacity = 1) {
   const key = `${color}:${basic}:${opacity}`;
   if (!materials.has(key))
     materials.set(
       key,
-      new (basic ? T.MeshBasicMaterial : T.MeshLambertMaterial)({
+      new (basic ? T.MeshBasicMaterial : T.MeshPhongMaterial)({
         color,
         transparent: opacity < 1,
         opacity,
         side: T.DoubleSide,
+        ...(basic ? {} : { shininess: 14, specular: 0x303c36 }),
       }),
     );
   return materials.get(key);
 }
 const unitBox = new T.BoxGeometry(1, 1, 1),
-  unitSphere = new T.SphereGeometry(1, 12, 8),
-  unitCylinder = new T.CylinderGeometry(1, 1, 1, 12);
+  unitSphere = new T.SphereGeometry(1, 20, 12),
+  unitCylinder = new T.CylinderGeometry(1, 1, 1, 16);
 export function mesh(
   parent,
   geo,
@@ -36,6 +38,65 @@ export function mesh(
   m.receiveShadow = true;
   parent.add(m);
   return m;
+}
+export function finishAsset(root, defaultKind = null) {
+  const wood = new Set([
+    0xae7953, 0x876541, 0xddc38a, 0x7c5946, 0xa27951, 0xc9a574, 0x906f55,
+    0x624d46, 0x887455, 0xa57d58, 0xa77d50,
+  ]);
+  const metal = new Set([
+    0x87a8ae, 0x506b79, 0xbdc6b8, 0x8c9ba5, 0xe8d699, 0x89a9ae, 0x749294,
+    0x536f74, 0x496e70, 0x799d97, 0xe8e2bc,
+  ]);
+  const buns = new Set([0xe8a548, 0xf4bc5b]);
+  root.traverse((node) => {
+    if (
+      !node.isMesh ||
+      !node.material.color ||
+      node.material.map ||
+      node.material.transparent
+    )
+      return;
+    const color = node.material.color.getHex();
+    const kind = buns.has(color)
+      ? "bun"
+      : wood.has(color)
+        ? "wood"
+        : metal.has(color)
+          ? "metal"
+          : [0x263443, 0x354659, 0x344b52].includes(color)
+            ? "rubber"
+            : defaultKind;
+    if (kind) node.material = surfaceMaterial(kind, color);
+  });
+  return root;
+}
+// Combine static parts by shared material while preserving local transforms.
+// The result keeps authored silhouettes and uses one draw per surface family.
+export function mergeStaticAsset(root) {
+  root.updateMatrixWorld(true);
+  const inverse = root.matrixWorld.clone().invert(),
+    buckets = new Map();
+  root.traverse((node) => {
+    if (!node.isMesh || Array.isArray(node.material)) return;
+    const key = node.material.uuid;
+    if (!buckets.has(key))
+      buckets.set(key, { material: node.material, geometries: [] });
+    const source = node.geometry.index
+      ? node.geometry.toNonIndexed()
+      : node.geometry.clone();
+    source.applyMatrix4(
+      new T.Matrix4().multiplyMatrices(inverse, node.matrixWorld),
+    );
+    buckets.get(key).geometries.push(source);
+  });
+  root.clear();
+  for (const { material, geometries } of buckets.values()) {
+    const geometry = mergeGeometries(geometries);
+    geometries.forEach((g) => g.dispose());
+    if (geometry) mesh(root, geometry, material);
+  }
+  return root;
 }
 export const box = (p, x, y, z, w, h, d, c) =>
   mesh(p, unitBox, c, x, y, z, w, h, d);
@@ -241,36 +302,57 @@ export function makeWagon() {
   }
   ball(propeller, 0, 0, 0.1, 0.17, 0.17, 0.14, 0xcb7c40);
   g.userData = { wheels, propeller };
-  return g;
+  return finishAsset(g);
 }
-function sign(p, text, x, y, z, width = 20, color = "#bf4e43") {
+export function sign(p, text, x, y, z, width = 20, color = "#bf4e43") {
   if (typeof document === "undefined") return;
   const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 128;
+  canvas.width = 1024;
+  canvas.height = 256;
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = color;
-  ctx.fillRect(0, 0, 512, 128);
+  ctx.fillRect(0, 0, 1024, 256);
   ctx.strokeStyle = "#fff1bd";
-  ctx.lineWidth = 9;
-  ctx.strokeRect(8, 8, 496, 112);
+  ctx.lineWidth = 12;
+  ctx.strokeRect(16, 16, 992, 224);
+  ctx.strokeStyle = "#ffffff35";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(29, 29, 966, 198);
   ctx.fillStyle = "#fff3cd";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = "bold 44px sans-serif";
-  ctx.fillText(text, 256, 67, 474);
+  ctx.shadowColor = "#182d36";
+  ctx.shadowBlur = 3;
+  ctx.shadowOffsetY = 3;
+  ctx.font = "bold 84px sans-serif";
+  ctx.fillText(text, 512, 135, 932);
   const texture = new T.CanvasTexture(canvas);
   texture.colorSpace = T.SRGBColorSpace;
-  const material = new T.MeshBasicMaterial({
+  texture.anisotropy = 4;
+  const material = new T.MeshPhongMaterial({
     map: texture,
     side: T.DoubleSide,
+    shininess: 10,
   });
   mesh(p, new T.PlaneGeometry(width, width / 4), material, x, y, z);
 }
 function porthole(p, x, y, z, r = 2.2) {
-  ring(p, x, y, z, r, 0.3, 0xe8d699);
+  ring(p, x, y, z, r, 0.3, surfaceMaterial("metal", 0xe8d699));
   const glass = cylinder(p, x, y, z - 0.08, r - 0.25, 0.13, 0x6cc1c2);
   glass.rotation.x = Math.PI / 2;
+  // An opaque dark interior and an off-center highlight read as deep glass.
+  const inset = cylinder(p, x, y, z + 0.01, r * 0.56, 0.14, 0x276a7c);
+  inset.rotation.x = Math.PI / 2;
+  ball(
+    p,
+    x - r * 0.25,
+    y + r * 0.27,
+    z + 0.1,
+    r * 0.14,
+    r * 0.26,
+    0.035,
+    0xcaf1db,
+  );
 }
 function pipe(p, x, y, z, r, h, c) {
   cylinder(p, x, y, z, r, h, c);
@@ -476,7 +558,8 @@ export function makeLandmark(type) {
     for (let i = 0; i < 4; i++)
       box(g, 0, 0.6 + i * 0.6, 17 - i * 1.5, 19, 1.2, 3, 0xbdcbae);
   }
-  return g;
+  finishAsset(g, ["head", "rock", "castle"].includes(type) ? "stone" : null);
+  return mergeStaticAsset(g);
 }
 export function makeHome(i = 0) {
   const g = new T.Group(),
@@ -489,7 +572,11 @@ export function makeHome(i = 0) {
   porthole(g, -2, 6, 4.6, 1.25);
   ball(g, 1.8, 2, 4.8, 1.3, 2.2, 0.25, 0x416877);
   pipe(g, 3, 13, -1, 0.5, 6, 0x749294);
-  return g;
+  // Recessed entry, door handle, weathered sill and a small house number plaque.
+  box(g, 1.8, 0.18, 6, 3.3, 0.35, 2.2, surfaceMaterial("stone", 0xc2c9a5));
+  ball(g, 2.35, 2, 5.1, 0.1, 0.1, 0.08, surfaceMaterial("metal", 0xdcc78d));
+  sign(g, String(101 + i), -2.4, 3.5, 4.9, 1.6, "#526d72");
+  return mergeStaticAsset(finishAsset(g, "metal"));
 }
 export function makeFish(color = 0xf2ae77) {
   const g = new T.Group();
@@ -498,11 +585,36 @@ export function makeFish(color = 0xf2ae77) {
   face(g, -0.18, 2.05, -0.39, 0.18);
   face(g, 0.18, 2.05, -0.39, 0.18);
   ball(g, 0, 1.62, -0.47, 0.2, 0.11, 0.13, 0xa46d6d);
-  for (const x of [-0.59, 0.59]) ball(g, x, 1.3, 0, 0.26, 0.5, 0.1, color);
-  for (const x of [-0.24, 0.24]) {
-    cylinder(g, x, 0.33, 0, 0.13, 0.6, color);
-    ball(g, x, 0.13, -0.1, 0.22, 0.15, 0.36, 0x444e65);
+  const arms = [],
+    legs = [];
+  for (const x of [-0.59, 0.59]) {
+    const arm = new T.Group();
+    arm.position.set(x, 1.65, 0);
+    g.add(arm);
+    ball(arm, 0, -0.3, 0, 0.2, 0.44, 0.14, color);
+    ball(arm, 0, -0.65, -0.07, 0.18, 0.17, 0.13, color);
+    arms.push(arm);
   }
+  for (const x of [-0.24, 0.24]) {
+    const leg = new T.Group();
+    leg.position.set(x, 0.65, 0);
+    g.add(leg);
+    cylinder(leg, 0, -0.3, 0, 0.13, 0.6, color);
+    ball(leg, 0, -0.52, -0.1, 0.22, 0.15, 0.36, 0x444e65);
+    legs.push(leg);
+  }
+  // Small fins, a shirt collar and a belt give residents more than a silhouette.
+  const fin = new T.Shape();
+  fin.moveTo(0, 0);
+  fin.lineTo(0.6, 0.35);
+  fin.lineTo(0, 0.65);
+  fin.closePath();
+  const tail = mesh(g, new T.ShapeGeometry(fin), color, 0, 1.25, 0.35);
+  tail.rotation.y = Math.PI / 2;
+  for (const x of [-0.18, 0.18])
+    box(g, x, 1.12, -0.42, 0.24, 0.1, 0.035, 0xeee4ba);
+  box(g, 0, 0.88, -0.28, 0.78, 0.08, 0.05, 0x4d696b);
+  g.userData = { arms, legs };
   return g;
 }
 export function makeBoat(color = 0xa78ab9) {
@@ -553,7 +665,7 @@ export function makeBarrel() {
   cylinder(g, 0, 1, 0, 0.95, 2, 0xa57d58);
   for (const y of [0.3, 1.65])
     mesh(g, barrelHoop, 0x536f74, 0, y, 0).rotation.x = Math.PI / 2;
-  return g;
+  return finishAsset(g);
 }
 export function crownGeometry() {
   const shape = new T.Shape();
@@ -635,4 +747,3 @@ export function makeArch(color = 0xc29ccb, width = 15, height = 13) {
     ball(g, x, 2, 0, 3.7, 3.5, 3.7, color);
   return g;
 }
-

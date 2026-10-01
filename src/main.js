@@ -26,7 +26,7 @@ try {
     0.2,
     software ? 650 : 1250,
   );
-  scene.add(new T.HemisphereLight(0xd2f3e8, 0x8d8261, 2.2));
+  scene.add(new T.HemisphereLight(0xc5e9e8, 0x526c69, software ? 2.0 : 1.45));
   if (software) scene.add(new T.AmbientLight(0xd9f0dd, 0.75));
   const sun = new T.DirectionalLight(0xffedc1, software ? 0.55 : 2.0);
   sun.position.set(-90, 150, 90);
@@ -38,6 +38,7 @@ try {
   sun.shadow.camera.bottom = -60;
   sun.shadow.camera.far = 400;
   sun.shadow.bias = -0.001;
+  sun.shadow.normalBias = 0.06;
   scene.add(sun);
   scene.add(sun.target);
   const save = loadSave(),
@@ -495,4 +496,3 @@ try {
   node.textContent = `The underwater town could not start. Refresh the page to try again. ${error.message}`;
   console.error(error);
 }
-

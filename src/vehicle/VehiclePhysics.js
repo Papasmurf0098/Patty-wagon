@@ -1,6 +1,7 @@
 import { terrainHeight, rampHeight, clamp } from "../world/Terrain.js";
 import { WORLD_SIZE, spawnFor } from "../world/WorldConfig.js";
 export { clamp };
+export const JUMP_GRAVITY = 18;
 // Exported for ramp and surface continuity checks; world ground uses terrain too.
 export function groundHeight(x, z, ramps = [], terrain = () => 0) {
   let y = terrain(x, z);
@@ -53,7 +54,7 @@ export function stepVehicle(s, input, dt, world) {
   let launched = false,
     landed = false;
   if (wasGrounded && ground - nextGround > 0.65 && Math.abs(s.speed) > 8) {
-    s.vy = (onRamp ? 8 : 2) + Math.abs(s.speed) * (onRamp ? 0.22 : 0.1);
+    s.vy = ((onRamp ? 8 : 2) + Math.abs(s.speed) * (onRamp ? 0.22 : 0.1)) * 0.9;
     launched = true;
   }
   if (wasGrounded && !launched) {
@@ -61,7 +62,7 @@ export function stepVehicle(s, input, dt, world) {
     s.y = nextGround;
     s.vy = 0;
   } else {
-    s.vy -= 24 * dt;
+    s.vy -= JUMP_GRAVITY * dt;
     s.y += s.vy * dt;
     if (s.y <= nextGround) {
       s.y = nextGround;
@@ -129,4 +130,3 @@ export function initialVehicle(spawn = spawnFor(), height = terrainHeight) {
     grounded: true,
   };
 }
-

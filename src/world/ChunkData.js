@@ -1,4 +1,5 @@
 import { surfacePaint } from "./SurfacePaint.js";
+import { livingSites, siteRadius } from "./TownPlan.js";
 import {
   CHUNK_SIZE,
   landmarks,
@@ -89,6 +90,9 @@ export function generateChunk(cx, cz, segments = 32) {
           (r) => Math.hypot(p.x - r.x, p.z - r.z) < r.length / 2 + 16,
         ) ||
         secrets.some((s) => Math.hypot(p.x - s.x, p.z - s.z) < 23) ||
+        livingSites.some(
+          (s) => Math.hypot(p.x - s.x, p.z - s.z) < siteRadius(s) + 6,
+        ) ||
         road.distance < road.width / 2 + 9 ||
         landmarks.some((l) => Math.hypot(p.x - l.x, p.z - l.z) < l.radius + 8)
       )
@@ -136,4 +140,3 @@ export function generateChunk(cx, cz, segments = 32) {
     paintSize: paint.resolution,
   };
 }
-

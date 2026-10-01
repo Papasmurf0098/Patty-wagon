@@ -51,7 +51,7 @@ See [the current design](docs/DESIGN.md) and [the approved correction plan](docs
 
 ## Validation and limits
 
-Twenty automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
+Twenty-three automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
 
 The deployed game was visually reviewed in SVG compatibility mode across all seven areas. The town map's area controls and the seven-area exploration milestone were also checked. Desktop WebGL rendering and real-phone performance are not yet measured. SVG mode is a compatibility view and has less scenery, no shadows or particle effects, and a lower render frequency. It is not a benchmark for WebGL quality. General seafloor collision follows terrain and ramps; caves are drive-through arches rather than a volumetric cave system, traffic is kinematic, and breakage uses particles rather than rigid-body fragments.
 
@@ -63,3 +63,13 @@ Streamed chunks now release their instance buffers when replaced or evicted, bar
 ## Open-world detail pass
 
 Decorative coral and kelp are reduced by 65.9% across the sampled 14×14 chunk grid (5,241 to 1,785 instances), retaining rock formations and authored landmarks. Base driving speed increases from 27 to 38 units/s, boost from 43 to 58, with stronger acceleration and adjusted steering. Fine repeating seafloor grain and current ripples use world coordinates so detail stays aligned across chunks. Roads gain sandy shoulders and wear, and landmarks gain compacted access paths and aprons. Inhabited districts gain sparse roadside benches and marine lamps. Jump landing detection also handles near-ground snaps correctly at higher speeds.
+
+## Materials and town-life release
+
+Seven cached 512×512 material families add wood grain, stone joints, metal wear, bun pores, tire tread, fabric weave, and sand ripples. Separate normal maps add lighting detail; color maps use sRGB while normal data remains unconverted. Phong lighting provides smoother shading and surface highlights. Fine terrain normals use world coordinates, and a shared uniform animates subtle water-light patterns on the ground and selected assets. Contact shading follows terrain beneath buildings and the wagon.
+
+Fourteen authored activity pockets furnish all seven districts: neighborhood laundry and post, market stalls, restaurant seating, shelters, working docks, and a repair shed. Foundations sample their corners for ground support; streets, jump approaches, and activity pockets reserve scenery clearances. Existing crown IDs and the 612-crown total are preserved. Residents gain articulated arms and legs, with additional pedestrians around gathering areas. Static landmark and prop geometry is merged by material to keep draw counts lower; the reduced coral/kelp density and faster driving stay in place.
+
+Jump gravity is 18 units/s², down from 24; launch impulse is scaled to 90% to give additional hang time with a controlled height increase. A 6m/11m-per-second reference flight lasts roughly 1.6 seconds and returns a single landing event. All 23 automated checks pass. The modified asset and terrain shaders compile and link with the installed Three.js shader generator on Mesa llvmpipe. The production build passes; real-device GPU frame rates remain unmeasured.
+
+See [the rendering research and implementation choices](docs/VISUAL_TECHNIQUES.md).
