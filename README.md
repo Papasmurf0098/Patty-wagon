@@ -6,15 +6,15 @@ Drive a hamburger wagon through a broad, connected underwater town inspired by t
 
 [Open the game](https://papasmurf0098.github.io/Patty-wagon/).
 
-WASD / arrows drive. Space brakes and drifts. Shift boosts. R recovers to the nearest road. M opens the town map. Escape pauses. Touch controls support steering, acceleration, reverse, drift, and boost together. Sound is opt-in.
+WASD / arrows drive. Space brakes and drifts. Shift boosts. R recovers to the nearest road. M opens the town map. E loads supplies, restores beacons, or recharges boost at a restored station. Escape pauses. Touch controls support steering, acceleration, reverse, drift, and boost together. Sound is opt-in.
 
 The town map shows the full connected network and lets you start exploring in any of the seven areas. Progress saves in the browser. The previous compact town's save remains archived under its original key, with its collected crowns counted toward wagon upgrade credit.
 
 ## This revision
 
-- A 1,800 × 1,800-unit seafloor map, replacing the previous 230-unit driving boundary.
+- A 2,400 × 2,400-unit seafloor map, replacing the previous 230-unit driving boundary.
 - Seven connected areas: Conch Street, Restaurant Commons, Jellyfish Fields, Goo Lagoon, Wreck Cove, Sand Mountain, and Neptune Terrace.
-- A 4.5 km main loop and approximately 8.9 km of roads overall, using the design convention of one world unit per meter.
+- A 4.5 km main loop and approximately 12.2 km of roads overall, using the design convention of one world unit per meter.
 - A hamburger-body wagon with an open upper-bun seating area, two passengers, sesame seeds, integrated wheels, a pickle flag, and animated propeller.
 - Individually modeled pineapple, stone-head and rock homes, Krusty Krab, Chum Bucket, Goofy Goober, Thug Tug, and Neptune's castle.
 - 612 crowns, 123 breakable barrels, nine ramps, seven secret locations, three exploration milestones, nine boat vehicles, 40 fish residents, and 38 jellyfish.
@@ -51,7 +51,7 @@ See [the current design](docs/DESIGN.md) and [the approved correction plan](docs
 
 ## Validation and limits
 
-Twenty-three automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
+Fifty-three automated checks cover driving direction, steering, boost, braking/reverse, elevated collision, ramp orientation and landing, the expanded driving bounds, seeded generation, shared chunk edges, minimum scenery spacing, collision/mesh height agreement, route clearance, persistent pickups/destruction, bounded streaming, save migration, and the wagon model. Production bundling passes.
 
 The deployed game was visually reviewed in SVG compatibility mode across all seven areas. The town map's area controls and the seven-area exploration milestone were also checked. Desktop WebGL rendering and real-phone performance are not yet measured. SVG mode is a compatibility view and has less scenery, no shadows or particle effects, and a lower render frequency. It is not a benchmark for WebGL quality. General seafloor collision follows terrain and ramps; caves are drive-through arches rather than a volumetric cave system, traffic is kinematic, and breakage uses particles rather than rigid-body fragments.
 
@@ -73,3 +73,53 @@ Fourteen authored activity pockets furnish all seven districts: neighborhood lau
 Jump gravity is 18 units/s², down from 24; launch impulse is scaled to 90% to give additional hang time with a controlled height increase. A 6m/11m-per-second reference flight lasts roughly 1.6 seconds and returns a single landing event. All 23 automated checks pass. The modified asset and terrain shaders compile and link with the installed Three.js shader generator on Mesa llvmpipe. The production build passes; real-device GPU frame rates remain unmeasured.
 
 See [the rendering research and implementation choices](docs/VISUAL_TECHNIQUES.md).
+
+## Scenic routes and collision release — October 1, 2026
+
+Seven additional district structures add distinct silhouettes and everyday uses: Conch Street water tower, Jellyfish Fields observation hut, Restaurant Commons billboard, lagoon boardwalk, Wreck Cove beacon, Sand Mountain quarry crane, and Neptune Terrace fountain. Shared wood, stone, fabric, and metal materials keep the existing texture detail; static geometry is merged by material. Foundations and piers support the structures. The boardwalk has terrain-connected approaches and a matching driving surface. Scenery reserves these footprints.
+
+Three optional scenic drives provide eighteen numbered roadside gates: Neighborhood Cruise, Lagoon Promenade, and Mountain Descent. Follow each route in order at your own pace. Gate progress persists across reloads in the existing save, and the next gate appears as a gold square on the maps. All 612 crown identities remain available.
+
+Continuous swept chassis collision prevents tunneling through thin posts, resolves overlapping spawns, and preserves tangent movement when scraping walls. Lower lateral grip creates greater drift slip while the existing 38/58-unit-per-second normal/boost limits and floatier jumps remain. Streamed rocks now have spatial collision entries, removed on replacement and disposal; rock placement avoids blocking crowns. Traffic boats have moving collision bounds and remain kinematic.
+
+Thirty-two checks pass, including thin-wall sweeps, inside corners, drift slip, ordered scenic progression, teleport rejection, save restoration, open road lanes, boardwalk surface continuity, moving traffic colliders, and rock collision cleanup. Production bundling passes. Real-phone WebGL performance remains unmeasured.
+
+## Side destinations and stunt release — October 1, 2026
+
+Three new destinations develop open sand beyond the existing town: Tidepool Gardens, Anchor Salvage Yard, and Old Shell Sanctuary. Approximately 551 meters of terrain-following side paths connect them to the main roads. Compacted surfaces, sparse shoulder posts, map lines, and direct map travel make them accessible. Tidepools include shell details and benches; the yard includes anchors, crates, winch equipment, stacked beams, and an open ribbed salvage hull; the sanctuary includes broken fluted columns, a drive-through arch, and a tiled courtyard. Models use shared textured materials and merged static geometry.
+
+Nine airborne stunt rings add optional ramp challenges. Pass through a ring in the forward direction and land cleanly after traveling at least 25 meters to earn its badge. Best successful jump distances and destination discoveries save in the existing browser save. Collisions or recovery cancel the attempt; missed rings carry no penalty or deadline. All nine challenges pass normal and boosted driving simulations with streamed rock collision present. Extended ramp approaches and landing corridors reserve scenery space.
+
+Twelve additional residents walk along promenade shoulders between destinations. Their paths follow the terrain, avoid main driving lanes, and check solid props. Existing crown identities and the 612-crown total remain intact. The map adds destination markers, side paths, and completion-colored stunt rings; these details stay in the map and pause menu rather than expanding the persistent HUD.
+
+All 39 automated checks and the production build pass. The additional checks cover vehicle-clear side paths, all nine stunt flights at two speeds with streamed scenery, ring direction and height, interrupted attempts, saves, landing-corridor exclusions, and resident paths.
+
+[Geometry layout preview](docs/previews/discovery-areas.jpg): generated from the new models using Three.js SVG projection. This review excludes normal maps, water-light shaders, cast shadows, and sign lettering; it is not a screenshot of final WebGL appearance. Real-phone WebGL frame times remain unmeasured.
+
+## Destination keepsakes and driving refinements — October 1, 2026
+
+Tidepool Gardens, Anchor Salvage Yard, and Old Shell Sanctuary now have optional three-item collections: pearls in open clams, salvage cogs, and echo shells. Nine animated keepsakes occupy the clear central driving aisles. Drive through them to collect; each completed set earns a persistent badge. Partial progress survives reloads, and the map's destination buttons show individual counts. No timer or extra control is required, and the persistent driving HUD stays compact. These keepsakes are separate from the existing 612 crowns and do not alter upgrades.
+
+Conch Hop now angles away from the pineapple so upgraded boosted flights can land cleanly. Scenic gates ignore initial positions after recovery or reload and require actual movement. Collection tracking also rejects parked, airborne, elevated, and teleport passes.
+
+All 43 checks pass. Stunt coverage now runs all nine ramps with and without boost at all three upgrade tiers (54 streamed driving simulations). Additional checks cover collection reachability, one-time rewards, token visibility, invalid saves, and partial progress restoration. Production bundling passes. A geometry-only review checked the new token placement; real-browser WebGL and phone performance remain unverified.
+
+## Outer waters, supply runs, and lighting — October 1, 2026
+
+The world grows from 1,800 to 2,400 units per side, increasing its area by about 78%. Four new roads add 3.28 km of connected driving. Lantern Harbor adds mooring structures and cargo, Abyss Relay adds a domed communications building and dish, and Driftwood Research Camp adds cabins and six new station workers across the three locations. Each station has a beacon tower, supply pad, storage props, reserved scenery space, and map travel. Terrain streaming, save-position bounds, and the enclosing reef now follow the larger world size.
+
+Three optional, untimed supply runs start at Tidepool Gardens, Anchor Salvage Yard, and Old Shell Sanctuary. Stop on a marked loading pad and press E or tap the contextual button. Drive to the named outer station and unload to restore its beacon. Restored stations recharge boost when stopped. Cargo and completed deliveries persist; map travel returns cargo to its depot, while nearby-road recovery preserves it. Map rings and destination descriptions identify the current delivery and pickup locations. Existing crowns and upgrades remain intact.
+
+Outer waters gradually shift toward cooler blue fog with reduced direct sunlight and readable ambient fill. Automatic terrain-aimed headlights strengthen outside the town. Restored beacons illuminate their surroundings using at most two nearby point lights, with no additional shadow maps. Software rendering retains brighter ambient lighting and omits these extra lights. The existing moving water-light shader and sun shadows remain.
+
+Validation: 47 tests cover existing gameplay plus frontier streaming, road clearance, cargo rules, recharge service, expanded saves, and lighting transitions. Production bundling passes. New station geometry was reviewed in SVG projection; final WebGL lighting appearance, touchscreen interaction, and real-phone frame times have not been visually verified. The larger bundle still triggers Vite's existing 500 kB advisory.
+
+## Driving activities and navigation — October 1, 2026
+
+H or the touch Horn button sounds the wagon horn when audio is enabled. A visible expanding ripple and brief reactions from nearby residents and jellyfish remain available with sound off. The reaction system reuses one ripple mesh.
+
+Three drift yards add repeatable untimed driving challenges: Harbor Drift Yard, Relay Skid Basin, and Research Slalom Court. Hold Drift while steering, then release to bank a clean grounded slide of at least 12 meters. Collisions, spins, airborne motion, recovery, and teleports cancel the chain. Best distances and badges persist. Authored access paths, compacted surfaces, and colored boundary markers keep the new activities legible, with procedural rock and foliage exclusions.
+
+Guide buttons select driving destinations without teleporting. Both maps highlight a route through the actual road and side-path network; active cargo automatically guides to its delivery station. The map also offers drift-yard guidance, best distances, and a clear-guide control. Guidance replans periodically while driving and is separate from map travel.
+
+Initial placement now preserves cargo loaded from a save. Bent discovery paths no longer have an extra straight painted approach crossing unreserved scenery. See [the missing-feature audit](docs/MISSING_FEATURES.md) for research, implemented choices, and remaining gaps. Automated checks pass; real WebGL and phone appearance remain unverified.

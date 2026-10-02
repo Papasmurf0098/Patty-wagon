@@ -1,5 +1,6 @@
 import { terrainHeight, rampHeight, clamp } from "../world/Terrain.js";
 import { WORLD_SIZE, spawnFor } from "../world/WorldConfig.js";
+import { slideMove } from "./Collision.js";
 export { clamp };
 export const JUMP_GRAVITY = 18;
 // Exported for ramp and surface continuity checks; world ground uses terrain too.
@@ -32,13 +33,15 @@ export function stepVehicle(s, input, dt, world) {
     clamp(s.speed / 25, -1, 1.15) *
     dt *
     (wasGrounded ? 1 : 0.38);
-  const grip = 1 - Math.exp(-(input.brake ? 2.4 : 8 + level) * dt);
+  const grip = 1 - Math.exp(-(wasGrounded ? (input.brake ? 1.35 : 5.5 + level * 0.4) : 0.65) * dt);
   s.vx += (-Math.sin(s.heading) * s.speed - s.vx) * grip;
   s.vz += (-Math.cos(s.heading) * s.speed - s.vz) * grip;
   const oldX = s.x,
     oldZ = s.z;
-  s.x += s.vx * dt;
-  s.z += s.vz * dt;
+  const solids = world.nearbySolids
+    ? world.nearbySolids(s.x + s.vx * dt / 2, s.z + s.vz * dt / 2, Math.hypot(s.vx,s.vz) * dt / 2 + 4)
+    : (world.solids ?? []);
+  const impacts = slideMove(s, s.vx * dt, s.vz * dt, solids);
   const limit = world.boundary ?? WORLD_SIZE / 2 - 8;
   if (Math.abs(s.x) > limit || Math.abs(s.z) > limit) {
     s.x = clamp(s.x, -limit, limit);
@@ -70,23 +73,6 @@ export function stepVehicle(s, input, dt, world) {
       landed = true;
     }
   }
-  const solids = world.nearbySolids
-    ? world.nearbySolids(s.x, s.z)
-    : (world.solids ?? []);
-  for (const b of solids)
-    if (
-      s.y < (b.y ?? 0) + b.height &&
-      s.y + 2.6 > (b.y ?? 0) &&
-      Math.abs(s.x - b.x) < b.w / 2 + 2.0 &&
-      Math.abs(s.z - b.z) < b.d / 2 + 2.1
-    ) {
-      s.x = oldX;
-      s.z = oldZ;
-      s.speed *= -0.22;
-      s.vx *= -0.2;
-      s.vz *= -0.2;
-      break;
-    }
   if (
     !["x", "z", "y", "heading", "speed", "vx", "vz", "vy"].every((k) =>
       Number.isFinite(s[k]),
@@ -112,7 +98,7 @@ export function stepVehicle(s, input, dt, world) {
     s.pitch *= Math.exp(-2 * dt);
     s.roll *= Math.exp(-2 * dt);
   }
-  return { boost, landed, launched };
+  return { boost, landed, launched, impacts };
 }
 export function initialVehicle(spawn = spawnFor(), height = terrainHeight) {
   return {

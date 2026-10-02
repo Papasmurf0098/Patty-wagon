@@ -8,8 +8,8 @@
     />
     <meta name="theme-color" content="#176f86" />
     <title>Patty Wagon • Free Roam</title>
-    <script type="module" crossorigin src="./assets/game-e1i9avCm.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/game-CqPXSI5e.css">
+    <script type="module" crossorigin src="./assets/game-By8h4mL7.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/game-BDds6UEw.css">
   </head>
   <body>
     <div id="water" aria-hidden="true">
@@ -81,9 +81,22 @@
       <h1>Take the scenic route.</h1>
       <p>
         WASD / arrows · drive<br />Space · drift & brake<br />Shift · boost<br />R
-        · return to nearest road<br />M · town map<br />Escape · pause
+        · return to nearest road<br />H · horn<br />E · load / deliver
+        supplies<br />M · town map<br />Escape · pause
       </p>
       <p id="progress"></p>
+      <p>
+        Follow the numbered roadside gates for three scenic routes. Your
+        progress saves at every gate. Explore at your own pace.
+      </p>
+      <p>
+        Jump through a gold stunt ring and land cleanly to earn a badge. Pale
+        side paths lead to three new destinations.
+      </p>
+      <p>
+        Hold Drift while steering in the three marked drift yards. Release to
+        bank a clean slide of at least 12 meters. Collisions cancel the chain.
+      </p>
       <p id="legacy"></p>
       <button id="resume">Keep exploring</button>
     </dialog>
@@ -104,13 +117,19 @@
         ></canvas>
         <div>
           <p class="map-instruction">
-            Choose an area to start exploring there.
+            Choose Guide to follow the gold road route, or choose an area to
+            travel there. Gold squares mark your next scenic-route gates. Stop
+            at a supply depot and press E or tap to load a beacon shipment.
+            Drive it to an outer station; map travel returns cargo to its depot.
           </p>
           <div id="area-list"></div>
         </div>
       </div>
+      <p id="navigation-status"></p>
+      <button id="clear-guidance">Clear guide</button>
       <p id="map-progress"></p>
     </dialog>
+    <button id="interact" hidden></button>
     <nav id="touch" aria-label="Driving controls">
       <div>
         <button data-key="ArrowLeft" aria-label="Steer left">◀</button
@@ -126,4 +145,3 @@
     <div id="error" hidden></div>
   </body>
 </html>
-

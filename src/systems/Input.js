@@ -2,7 +2,7 @@ export class Input {
   constructor() {
     this.keys = new Set();
     this.pointers = new Map();
-    const allowed = /^(Arrow|Key[WASDR]|Space|Shift|Escape)/;
+    const allowed = /^(Arrow|Key[WASDRH]|Space|Shift|Escape)/;
     addEventListener("keydown", (e) => {
       if (allowed.test(e.code)) {
         e.preventDefault();

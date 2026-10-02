@@ -1,11 +1,17 @@
+import { distanceToDriftPath } from "./DriftPlan.js";
 import { surfacePaint } from "./SurfacePaint.js";
 import { livingSites, siteRadius } from "./TownPlan.js";
+import { districtDetails } from "./DistrictDetails.js";
+import { discoverySites, distanceToDiscoveryPath } from "./DiscoveryPlan.js";
 import {
   CHUNK_SIZE,
+  driftPads,
+  frontierSites,
   landmarks,
   ramps,
   secrets,
   districtAt,
+  inRampCorridor,
 } from "./WorldConfig.js";
 import {
   hash,
@@ -86,13 +92,25 @@ export function generateChunk(cx, cz, segments = 32) {
         continue;
       const road = nearestRoad(p.x, p.z);
       if (
-        ramps.some(
-          (r) => Math.hypot(p.x - r.x, p.z - r.z) < r.length / 2 + 16,
+        distanceToDriftPath(p.x, p.z) < 14 ||
+        driftPads.some(
+          (s) => Math.hypot(p.x - s.x, p.z - s.z) < s.radius + 8,
         ) ||
+        frontierSites.some(
+          (s) => Math.hypot(p.x - s.x, p.z - s.z) < s.radius + 8,
+        ) ||
+        ramps.some((r) => inRampCorridor(p.x, p.z, r)) ||
         secrets.some((s) => Math.hypot(p.x - s.x, p.z - s.z) < 23) ||
         livingSites.some(
           (s) => Math.hypot(p.x - s.x, p.z - s.z) < siteRadius(s) + 6,
         ) ||
+        districtDetails.some(
+          (s) => Math.hypot(p.x - s.x, p.z - s.z) < s.radius + 8,
+        ) ||
+        discoverySites.some(
+          (s) => Math.hypot(p.x - s.x, p.z - s.z) < s.radius + 7,
+        ) ||
+        distanceToDiscoveryPath(p.x, p.z) < 14 ||
         road.distance < road.width / 2 + 9 ||
         landmarks.some((l) => Math.hypot(p.x - l.x, p.z - l.z) < l.radius + 8)
       )

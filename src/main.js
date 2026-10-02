@@ -5,15 +5,33 @@ import { World } from "./world/World.js";
 import { makeWagon } from "./art/Models.js";
 import {
   districts,
+  driftPads,
+  frontierSites,
   secrets,
   spawnFor,
   WORLD_SIZE,
 } from "./world/WorldConfig.js";
-import { roadPaths, terrainHeight } from "./world/Terrain.js";
+import { roadPaths, terrainHeight, nearestRoad } from "./world/Terrain.js";
 import { Input } from "./systems/Input.js";
 import { Audio } from "./systems/Audio.js";
 import { loadSave, writeSave } from "./core/SaveManager.js";
 import { initialVehicle, stepVehicle } from "./vehicle/VehiclePhysics.js";
+import { scenicRoutes, ScenicProgress } from "./world/ScenicRoutes.js";
+import { discoverySites, discoveryPaths } from "./world/DiscoveryPlan.js";
+import { stuntTargets, StuntProgress } from "./world/StuntProgress.js";
+import {
+  destinationCollections,
+  DestinationProgress,
+} from "./world/DestinationCollections.js";
+import {
+  supplyRuns,
+  supplyAction,
+  performSupplyAction,
+} from "./world/SupplyRuns.js";
+import { WorldLighting } from "./systems/WorldLighting.js";
+import { driftPaths } from "./world/DriftPlan.js";
+import { planRoute } from "./world/Navigation.js";
+import { DriftProgress } from "./world/DriftProgress.js";
 try {
   const $ = (s) => document.querySelector(s),
     canvas = $("#game"),
@@ -26,7 +44,12 @@ try {
     0.2,
     software ? 650 : 1250,
   );
-  scene.add(new T.HemisphereLight(0xc5e9e8, 0x526c69, software ? 2.0 : 1.45));
+  const hemisphere = new T.HemisphereLight(
+    0xc5e9e8,
+    0x526c69,
+    software ? 2.0 : 1.45,
+  );
+  scene.add(hemisphere);
   if (software) scene.add(new T.AmbientLight(0xd9f0dd, 0.75));
   const sun = new T.DirectionalLight(0xffedc1, software ? 0.55 : 2.0);
   sun.position.set(-90, 150, 90);
@@ -41,11 +64,21 @@ try {
   sun.shadow.normalBias = 0.06;
   scene.add(sun);
   scene.add(sun.target);
+  const lighting = new WorldLighting(scene, sun, hemisphere, software);
   const save = loadSave(),
     world = new World(scene, save, { software }),
     input = new Input(),
     audio = new Audio(),
     car = makeWagon();
+  const scenicProgress = new ScenicProgress(save);
+  const driftProgress = new DriftProgress(save);
+  let guidance = null,
+    navRoute = null,
+    lastNavigation = -10,
+    hornHeld = false,
+    lastHorn = -10;
+  const stuntProgress = new StuntProgress(save);
+  const destinationProgress = new DestinationProgress(save);
   scene.add(car);
   if (software)
     car.traverse((node) => {
@@ -99,7 +132,7 @@ try {
     notify(message);
   }
   function progress() {
-    return `${save.coins.length} / ${world.coins.length} crowns · ${save.visited.length} / 7 areas explored · ${save.secrets.length} / 7 secrets · ${save.broken.length} props smashed`;
+    return `${save.coins.length} / ${world.coins.length} crowns · ${save.visited.length} / 7 areas explored · ${save.secrets.length} / 7 secrets · ${save.broken.length} props smashed · ${scenicRoutes.filter((r) => save.trails[r.id] === r.gates.length).length} / 3 scenic routes · ${save.activities.filter((id) => id.startsWith("stunt:")).length} / 9 stunt rings · ${save.discoveries.length} / 3 destinations · ${save.keepsakes.length} / 9 keepsakes · ${save.deliveries.length} / 3 beacons restored · ${save.activities.filter((id) => id.startsWith("drift:")).length} / 3 drift badges`;
   }
   function pause(value) {
     paused = value;
@@ -140,8 +173,21 @@ try {
   $("#help").onclick = () => pause(true);
   $("#resume").onclick = () => pause(false);
   $("#close-map").onclick = () => pause(false);
-  function place(spawn, message) {
+  function place(spawn, message, keepCargo = false) {
+    if (!keepCargo) {
+      guidance = null;
+      navRoute = null;
+    }
+    lastNavigation = -10;
+    if (save.cargo && !keepCargo) {
+      save.cargo = null;
+      message += " · Supplies returned to depot";
+    }
     state = initialVehicle(spawn, world.heightAt.bind(world));
+    scenicProgress.resetPosition();
+    stuntProgress.reset();
+    driftProgress.reset();
+    destinationProgress.reset();
     jumpStart = null;
     camera.position.set(
       state.x + Math.sin(state.heading) * 18,
@@ -153,7 +199,7 @@ try {
     if (message) notify(message);
   }
   $("#reset").onclick = () =>
-    place(world.recover(state.x, state.z), "Back on the nearest road.");
+    place(world.recover(state.x, state.z), "Back on the nearest road.", true);
   $("#sound").onclick = (e) => {
     e.target.textContent = audio.toggle() ? "Sound on" : "Sound off";
   };
@@ -187,6 +233,63 @@ try {
       });
       ctx.stroke();
     }
+    ctx.strokeStyle = "#c4c393";
+    ctx.lineWidth = size > 300 ? 2 : 1;
+    for (const path of [...discoveryPaths, ...driftPaths]) {
+      ctx.beginPath();
+      path.nodes.forEach((p, i) => {
+        const [x, z] = point(p.x, p.z);
+        i ? ctx.lineTo(x, z) : ctx.moveTo(x, z);
+      });
+      ctx.stroke();
+    }
+    if (navRoute) {
+      ctx.strokeStyle = "#ffe28e";
+      ctx.lineWidth = size > 300 ? 4 : 2;
+      ctx.beginPath();
+      navRoute.points.forEach((p, i) => {
+        const [x, z] = point(p.x, p.z);
+        i ? ctx.lineTo(x, z) : ctx.moveTo(x, z);
+      });
+      ctx.stroke();
+    }
+    for (const pad of driftPads) {
+      const [x, z] = point(pad.x, pad.z);
+      ctx.strokeStyle = save.activities.includes(`drift:${pad.id}`)
+        ? "#89d2b3"
+        : "#edaecd";
+      ctx.beginPath();
+      ctx.arc(x, z, (pad.radius / WORLD_SIZE) * size, 0, Math.PI * 2);
+      ctx.stroke();
+      if (size > 300) {
+        ctx.font = "10px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#efd7eb";
+        ctx.fillText(pad.name, x, z - 13);
+      }
+    }
+    for (const site of [...discoverySites, ...frontierSites]) {
+      const [x, z] = point(site.x, site.z);
+      ctx.fillStyle =
+        save.deliveries.includes(site.id) || save.discoveries.includes(site.id)
+          ? "#83d8c7"
+          : "#c9bccf";
+      ctx.fillRect(x - 3, z - 3, 6, 6);
+      if (size > 300) {
+        ctx.font = "11px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText(site.name, x, z - 9);
+      }
+    }
+    for (const target of stuntTargets) {
+      const [x, z] = point(target.x, target.z);
+      ctx.strokeStyle = save.activities.includes(`stunt:${target.id}`)
+        ? "#89d2b3"
+        : "#f4c477";
+      ctx.beginPath();
+      ctx.arc(x, z, size > 300 ? 3 : 1.6, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     for (const d of districts) {
       const [x, z] = point(d.x, d.z);
       ctx.fillStyle = save.visited.includes(d.id) ? "#ffd56d" : "#d9e9d8";
@@ -198,6 +301,18 @@ try {
         ctx.textAlign = "center";
         ctx.fillText(d.name, x, z - 12);
       }
+    }
+    for (const run of supplyRuns) {
+      if (save.deliveries.includes(run.id)) continue;
+      const target =
+        save.cargo === run.id ? run.target : !save.cargo ? run.source : null;
+      if (!target) continue;
+      const [x, z] = point(target.x, target.z);
+      ctx.strokeStyle = save.cargo ? "#ffdf89" : "#d7bbf0";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, z, size > 300 ? 7 : 4, 0, Math.PI * 2);
+      ctx.stroke();
     }
     if (player) {
       const [x, z] = point(state.x, state.z);
@@ -216,6 +331,24 @@ try {
       ctx.fill();
       ctx.stroke();
       ctx.restore();
+    }
+    for (const route of scenicRoutes) {
+      const gate = route.gates[save.trails[route.id] ?? 0];
+      if (!gate) continue;
+      const [x, z] = point(gate.x, gate.z);
+      ctx.strokeStyle = "#ffe292";
+      ctx.lineWidth = size > 300 ? 2 : 1;
+      ctx.strokeRect(x - 3, z - 3, 6, 6);
+      if (size > 300) {
+        ctx.fillStyle = "#fff1c5";
+        ctx.font = "11px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText(
+          `${route.name} ${(save.trails[route.id] ?? 0) + 1}/6`,
+          x,
+          z + 17,
+        );
+      }
     }
   }
   const descriptions = [
@@ -241,16 +374,138 @@ try {
       pause(false);
       place(spawnFor(d.id), d.name);
     };
-    areaList.append(button);
+    const row = document.createElement("div");
+    row.className = "area-row";
+    const guide = document.createElement("button");
+    guide.textContent = "Guide";
+    guide.setAttribute("aria-label", `Guide to ${d.name}`);
+    guide.onclick = () => {
+      const spawn = spawnFor(d.id),
+        road = nearestRoad(spawn.x, spawn.z, true);
+      guidance = { x: road.x, z: road.z, name: d.name };
+      lastNavigation = -10;
+      pause(false);
+      notify(`Guidance · ${d.name}`);
+    };
+    row.append(button, guide);
+    areaList.append(row);
   });
+  for (const site of [...discoverySites, ...frontierSites]) {
+    const button = document.createElement("button");
+    button.className = "area";
+    const title = document.createElement("strong"),
+      small = document.createElement("small");
+    title.textContent = site.name;
+    if (discoverySites.includes(site)) small.dataset.collection = site.id;
+    else small.dataset.frontier = site.id;
+    small.textContent = discoverySites.includes(site)
+      ? "Drive through the floating keepsakes"
+      : "Outer waters · supply beacon";
+    button.append(title, small);
+    button.onclick = () => {
+      pause(false);
+      place({ x: site.x, z: site.z - 20, heading: Math.PI }, site.name);
+    };
+    const row = document.createElement("div");
+    row.className = "area-row";
+    const guide = document.createElement("button");
+    guide.textContent = "Guide";
+    guide.setAttribute("aria-label", `Guide to ${site.name}`);
+    guide.onclick = () => {
+      guidance = { x: site.x, z: site.z, name: site.name };
+      lastNavigation = -10;
+      pause(false);
+      notify(`Guidance · ${site.name}`);
+    };
+    row.append(button, guide);
+    areaList.append(row);
+  }
+  $("#clear-guidance").onclick = () => {
+    guidance = null;
+    navRoute = null;
+    lastNavigation = -10;
+    showMap();
+  };
+  function updateNavigation() {
+    const shipment = supplyRuns.find((r) => r.id === save.cargo);
+    const target = shipment
+      ? { ...shipment.target, name: shipment.name }
+      : guidance;
+    navRoute = target ? planRoute(state, target) : null;
+    if (
+      !shipment &&
+      target &&
+      Math.hypot(state.x - target.x, state.z - target.z) < 15
+    ) {
+      guidance = null;
+      navRoute = null;
+      notify(`Arrived · ${target.name}`);
+    }
+  }
+  for (const pad of driftPads) {
+    const button = document.createElement("button");
+    button.className = "area";
+    button.dataset.drift = pad.id;
+    button.textContent = `Guide to ${pad.name}`;
+    button.onclick = () => {
+      guidance = { x: pad.x, z: pad.z, name: pad.name };
+      lastNavigation = -10;
+      pause(false);
+      notify(`Guidance · ${pad.name}`);
+    };
+    areaList.append(button);
+  }
   function showMap() {
+    updateNavigation();
     input.clear();
     paused = true;
     if (menu.open) menu.close();
     if (!atlas.open) atlas.showModal();
     drawMap($("#town-map").getContext("2d"), 600);
-    $("#map-progress").textContent = progress();
+    $("#clear-guidance").disabled = !!save.cargo;
+    for (const pad of driftPads)
+      document.querySelector(`[data-drift="${pad.id}"]`).textContent =
+        `Guide to ${pad.name}${save.bestDrifts[pad.id] ? ` · Best ${Math.round(save.bestDrifts[pad.id])} m` : " · Clean slide 12 m"}`;
+    $("#navigation-status").textContent = navRoute
+      ? `${navRoute.target.name} · ${Math.round(navRoute.length + navRoute.approach + navRoute.arrival)} m · follow the gold line`
+      : "Choose Guide to follow a route while driving.";
+    $("#map-progress").textContent =
+      progress() +
+      (save.cargo
+        ? ` · Supplies aboard for ${supplyRuns.find((r) => r.id === save.cargo).name}`
+        : "");
+    for (const run of supplyRuns) {
+      document.querySelector(`[data-frontier="${run.id}"]`).textContent =
+        save.deliveries.includes(run.id)
+          ? "Beacon restored"
+          : save.cargo === run.id
+            ? "Supplies aboard · drive here to deliver"
+            : `Supplies at ${run.source.name}`;
+    }
+    for (const c of destinationCollections) {
+      const count = c.items.filter((item) =>
+        save.keepsakes.includes(item.id),
+      ).length;
+      document.querySelector(`[data-collection="${c.id}"]`).textContent =
+        `${c.name} · ${count}/3${count === 3 ? " · Complete" : " · Drive through keepsakes"}`;
+    }
   }
+  function interact() {
+    if (paused) return;
+    const action = performSupplyAction(save, state);
+    if (!action) return;
+    persist();
+    lastNavigation = -10;
+    audio.tone(action.delivery ? 1200 : 700, 0.25);
+    notify(
+      action.service
+        ? "Boost recharged · ready to explore"
+        : action.delivery
+          ? `${action.label} · Complete`
+          : `Supplies loaded · drive to ${supplyRuns.find((r) => r.id === action.id).name}`,
+    );
+  }
+  $("#interact").onclick = interact;
   $("#map").onclick = showMap;
   $("#minimap").onclick = showMap;
   addEventListener("keydown", (e) => {
@@ -258,6 +513,10 @@ try {
     if (e.code === "Escape") {
       e.preventDefault();
       pause(!paused);
+    }
+    if (e.code === "KeyE") {
+      e.preventDefault();
+      interact();
     }
     if (e.code === "KeyR") $("#reset").click();
     if (e.code === "KeyM") {
@@ -282,7 +541,8 @@ try {
       pause(true);
       const node = $("#error");
       node.hidden = false;
-      node.textContent = "Graphics paused. Waiting for the browser to restore the game…";
+      node.textContent =
+        "Graphics paused. Waiting for the browser to restore the game…";
     });
     canvas.addEventListener("webglcontextrestored", () => {
       $("#error").hidden = true;
@@ -297,7 +557,7 @@ try {
   }
   addEventListener("resize", resize);
   resize();
-  place(save.position ?? spawnFor());
+  place(save.position ?? spawnFor(), null, true);
   function frame(now) {
     requestAnimationFrame(frame);
     const elapsed = Math.min((now - last) / 1000, 0.12);
@@ -325,6 +585,29 @@ try {
     const steps = Math.max(1, Math.ceil(elapsed / (1 / 60)));
     for (let i = 0; i < steps; i++) {
       const result = stepVehicle(state, controls, elapsed / steps, world);
+      driftProgress.step(state, controls, result, (pad, distance, first) => {
+        persist();
+        audio.tone(1000, 0.2);
+        notify(
+          `${first ? "Drift badge" : "New drift best"} · ${pad.name} · ${Math.round(distance)} m`,
+        );
+      });
+      destinationProgress.step(state, (collection, count, finished) => {
+        persist();
+        audio.tone(finished ? 1250 : 850, 0.18);
+        notify(
+          finished
+            ? `${collection.name} · collection complete`
+            : `${collection.item} found · ${count}/3`,
+        );
+      });
+      stuntProgress.step(state, result, (target, distance, first) => {
+        persist();
+        audio.tone(first ? 1200 : 900, 0.22);
+        notify(
+          `${first ? "Stunt badge" : "New stunt best"} · ${target.id.replaceAll("-", " ")} · ${Math.round(distance)} m`,
+        );
+      });
       if (result.launched && !jumpStart) jumpStart = { x: state.x, z: state.z };
       if (result.landed && jumpStart) {
         const distance = Math.hypot(
@@ -335,6 +618,17 @@ try {
         if (distance > 35) complete("jump", "Long jump · 35 meters cleared");
         jumpStart = null;
       }
+    }
+    const horn = input.has("KeyH");
+    if (horn && !hornHeld && time - lastHorn > 0.8) {
+      world.honk(state, time);
+      audio.horn();
+      lastHorn = time;
+    }
+    hornHeld = horn;
+    if (time - lastNavigation > 3) {
+      updateNavigation();
+      lastNavigation = time;
     }
     world.update(
       time,
@@ -355,6 +649,25 @@ try {
         persist();
       },
     );
+    scenicProgress.update(state, (route, count, finished) => {
+      persist();
+      audio.tone(finished ? 1100 : 780, 0.15);
+      notify(
+        finished
+          ? `${route.name} complete`
+          : `${route.name} · ${count}/6 gates`,
+      );
+    });
+    for (const site of discoverySites)
+      if (
+        Math.hypot(state.x - site.x, state.z - site.z) < 25 &&
+        !save.discoveries.includes(site.id)
+      ) {
+        save.discoveries.push(site.id);
+        persist();
+        audio.tone(1050, 0.2);
+        notify(`Discovered · ${site.name}`);
+      }
     for (const d of districts)
       if (
         Math.hypot(state.x - d.x, state.z - d.z) < 155 &&
@@ -420,8 +733,15 @@ try {
       state.y + 1.8,
       state.z - Math.cos(state.heading) * 5,
     );
-    sun.position.set(state.x - 90, state.y + 150, state.z + 90);
-    sun.target.position.set(state.x, state.y, state.z);
+    lighting.update(state, elapsed, save);
+    const action = supplyAction(save, state);
+    const drift = driftProgress.chain;
+    $("#interact").disabled = !action;
+    $("#interact").hidden = !action && !drift;
+    if (!action && drift)
+      $("#interact").textContent =
+        `Clean drift · ${Math.round(drift.distance)} m · release to bank`;
+    if (action) $("#interact").textContent = `${action.label} · E / Tap`;
     if (time - lastHud > 0.14) {
       $("#score").textContent = save.coins.length;
       $("#speed-value").textContent = Math.round(Math.abs(state.speed) * 3.6);
@@ -432,11 +752,12 @@ try {
           : world.collected >= 30
             ? "Boost II"
             : "Boost";
-      $("#district").textContent = districts.reduce((a, b) =>
-        Math.hypot(state.x - a.x, state.z - a.z) <
-        Math.hypot(state.x - b.x, state.z - b.z)
-          ? a
-          : b,
+      $("#district").textContent = [...districts, ...frontierSites].reduce(
+        (a, b) =>
+          Math.hypot(state.x - a.x, state.z - a.z) <
+          Math.hypot(state.x - b.x, state.z - b.z)
+            ? a
+            : b,
       ).name;
       drawMap(context, 168);
       lastHud = time;
@@ -485,6 +806,10 @@ try {
         drawCalls: renderer.info.render.calls ?? renderer.info.render.faces,
         fps: stats.fps,
         bestJump,
+        districtDetails: world.districtObjects.length,
+        scenicGates: world.scenicGates.length,
+        destinations: world.discoveryObjects.length,
+        stuntRings: world.stuntRings.length,
       };
     },
   };

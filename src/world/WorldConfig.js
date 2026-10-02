@@ -1,6 +1,6 @@
 export const WORLD_SEED = 200411;
 export const WORLD_VERSION = 2;
-export const WORLD_SIZE = 1800;
+export const WORLD_SIZE = 2400;
 export const CHUNK_SIZE = 128;
 export const districts = [
   {
@@ -141,6 +141,83 @@ export const routes = [
     ],
   },
 ];
+export const frontierSites = [
+  {
+    id: "lantern-harbor",
+    name: "Lantern Harbor",
+    kind: "harbor",
+    x: 1040,
+    z: 620,
+    radius: 58,
+    color: 0xffd392,
+  },
+  {
+    id: "abyss-relay",
+    name: "Abyss Relay",
+    kind: "relay",
+    x: 1080,
+    z: -500,
+    radius: 58,
+    color: 0x7fdde5,
+  },
+  {
+    id: "driftwood-camp",
+    name: "Driftwood Research Camp",
+    kind: "camp",
+    x: -1060,
+    z: -900,
+    radius: 58,
+    color: 0xbac7ff,
+  },
+];
+routes.push(
+  {
+    id: "east-harbor",
+    frontier: true,
+    width: 22,
+    points: [
+      [730, 310],
+      [880, 390],
+      [1040, 470],
+      [1040, 620],
+    ],
+  },
+  {
+    id: "outer-coast",
+    frontier: true,
+    width: 22,
+    points: [
+      [1040, 620],
+      [1040, 780],
+      [1130, 650],
+      [1140, 100],
+      [1080, -330],
+      [1080, -500],
+    ],
+  },
+  {
+    id: "relay-link",
+    frontier: true,
+    width: 22,
+    points: [
+      [700, -140],
+      [900, -190],
+      [1080, -350],
+      [1080, -500],
+    ],
+  },
+  {
+    id: "western-expedition",
+    frontier: true,
+    width: 22,
+    points: [
+      [-700, -420],
+      [-900, -480],
+      [-1060, -700],
+      [-1060, -900],
+    ],
+  },
+);
 export const landmarks = [
   { id: "pineapple", type: "pineapple", x: -468, z: 295, radius: 21 },
   { id: "squidward", type: "head", x: -386, z: 350, radius: 19 },
@@ -159,7 +236,7 @@ export const ramps = [
     width: 16,
     length: 25,
     height: 5,
-    heading: 0,
+    heading: 0.15,
   },
   {
     id: "fields-leap",
@@ -255,6 +332,20 @@ export function districtAt(x, z) {
   }
   return best;
 }
+export function inRampCorridor(x, z, ramp) {
+  const dx = x - ramp.x,
+    dz = z - ramp.z,
+    c = Math.cos(ramp.heading),
+    s = Math.sin(ramp.heading);
+  const lateral = c * dx - s * dz,
+    along = s * dx + c * dz;
+  // Boosted flights off high dunes need a long clear runout, not just a ramp apron.
+  return (
+    Math.abs(lateral) < ramp.width / 2 + 8 &&
+    along < ramp.length / 2 + 30 &&
+    along > -ramp.length / 2 - 230
+  );
+}
 export function spawnFor(id = "conch") {
   const d = districts.find((d) => d.id === id) ?? districts[0];
   const spawns = {
@@ -269,3 +360,30 @@ export function spawnFor(id = "conch") {
   const [x, z, heading] = spawns[d.id];
   return { x, z, heading };
 }
+
+export const driftPads = [
+  {
+    id: "harbor-slide",
+    name: "Harbor Drift Yard",
+    x: 905,
+    z: 600,
+    radius: 43,
+    color: 0xffd392,
+  },
+  {
+    id: "relay-slide",
+    name: "Relay Skid Basin",
+    x: 965,
+    z: -525,
+    radius: 43,
+    color: 0x87d8db,
+  },
+  {
+    id: "camp-slide",
+    name: "Research Slalom Court",
+    x: -920,
+    z: -820,
+    radius: 43,
+    color: 0xc8b4e2,
+  },
+];

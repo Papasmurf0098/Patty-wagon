@@ -1,10 +1,18 @@
 import { colorAt, nearestRoad, hash, clamp, lerp } from "./Terrain.js";
-import { landmarks } from "./WorldConfig.js";
+import { landmarks, frontierSites, driftPads } from "./WorldConfig.js";
 import { livingSites, siteRadius } from "./TownPlan.js";
-const approaches = [
+import { discoverySites, distanceToDiscoveryPath } from "./DiscoveryPlan.js";
+import { distanceToDriftPath } from "./DriftPlan.js";
+export const approachSites = [
   ...landmarks,
+  ...frontierSites,
+
   ...livingSites.map((s) => ({ ...s, radius: siteRadius(s) - 2 })),
-].map((l) => ({ ...l, road: nearestRoad(l.x, l.z, true) }));
+];
+const approaches = approachSites.map((l) => ({
+  ...l,
+  road: nearestRoad(l.x, l.z, true),
+}));
 function approachWeight(x, z) {
   let weight = 0;
   for (const l of approaches) {
@@ -23,6 +31,11 @@ function approachWeight(x, z) {
       clamp((l.radius + 7 - apron) / 4, 0, 1),
     );
   }
+  for (const site of [...discoverySites, ...driftPads])
+    weight = Math.max(
+      weight,
+      clamp((site.radius + 7 - Math.hypot(x - site.x, z - site.z)) / 4, 0, 1),
+    );
   return weight;
 }
 const roadColor = [0.0802, 0.2423, 0.2582];
@@ -33,7 +46,15 @@ export function surfaceColor(x, z) {
     road = nearestRoad(x, z),
     weight = clamp((road.width / 2 + 1 - road.distance) / 2, 0, 1),
     grain = 0.98 + hash(Math.floor(x * 2), Math.floor(z * 2), 51) * 0.04;
-  const approach = approachWeight(x, z);
+  const approach = Math.max(
+    approachWeight(x, z),
+    clamp(
+      (7 - Math.min(distanceToDiscoveryPath(x, z), distanceToDriftPath(x, z))) /
+        2,
+      0,
+      1,
+    ),
+  );
   // Compacted entrances connect landmarks to streets; shoulders collect sand.
   const shoulder = clamp(
     1 - Math.abs(road.distance - road.width / 2) / 3,
